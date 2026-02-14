@@ -31,6 +31,7 @@ class SecurityConfig(
     @Bean
     fun securityFilterChain(http: HttpSecurity): SecurityFilterChain {
         http
+            .cors { }
             .csrf { it.disable() }
             .authorizeHttpRequests { auth ->
                 auth
@@ -47,7 +48,8 @@ class SecurityConfig(
                         "/api/auth/health",
                         "/api/sellers/register",
                         "/api/sellers",
-                        "/api/sellers/{id}"
+                        "/api/sellers/{id}",
+                        "/api/users/**"
                     ).permitAll()
                     .anyRequest().authenticated()
             }

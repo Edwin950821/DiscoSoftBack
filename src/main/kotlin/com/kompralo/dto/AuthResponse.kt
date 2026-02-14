@@ -20,9 +20,17 @@ data class GoogleRegisterRequest(
 
 // DTO para el request de Google OAuth usando access_token (alternativo)
 data class GoogleRegisterWithTokenRequest(
-    val access_token: String,   // Access Token de Google OAuth (match frontend)
-    val email: String,          // Email del usuario
-    val name: String,           // Nombre del usuario
-    val googleId: String,       // ID único de Google (sub)
-    val accountType: String     // "user" = Comprador | "business" = Vendedor
-)
+    val access_token: String? = null,   // Access Token de Google OAuth
+    val accessToken: String? = null,    // Alternativa camelCase
+    val email: String,
+    val name: String,
+    val googleId: String? = null,       // ID único de Google (sub)
+    val sub: String? = null,            // Alternativa para googleId
+    val accountType: String
+) {
+    // Obtener el token de cualquiera de los dos campos
+    fun getToken(): String = access_token ?: accessToken ?: ""
+
+    // Obtener googleId de cualquiera de los dos campos
+    fun getGoogleIdValue(): String = googleId ?: sub ?: ""
+}

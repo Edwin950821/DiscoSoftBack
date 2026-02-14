@@ -30,14 +30,15 @@ class AuthController(
 
     /**
      * Crea una cookie HTTP-only con el token JWT
-     * La cookie se elimina automáticamente al cerrar el navegador (session cookie)
+     * La cookie persiste por 24 horas (igual que el token JWT)
      */
     private fun createAuthCookie(token: String): Cookie {
         return Cookie("authToken", token).apply {
             isHttpOnly = true  // Protege contra XSS
             secure = false     // true en producción con HTTPS
             path = "/"
-            maxAge = -1        // Session cookie: se elimina al cerrar el navegador
+            maxAge = 86400     // 24 horas en segundos (igual que jwt.expiration)
+            setAttribute("SameSite", "Lax")  // Permite cookies en navegación normal
         }
     }
 
@@ -50,6 +51,7 @@ class AuthController(
             secure = false
             path = "/"
             maxAge = 0  // Elimina la cookie inmediatamente
+            setAttribute("SameSite", "Lax")
         }
     }
 
@@ -71,22 +73,13 @@ class AuthController(
         servletResponse: HttpServletResponse
     ): ResponseEntity<*> {
         return try {
-            // Intenta registrar al usuario usando el servicio
             val response = authService.register(request)
 
-            // Extrae el token y lo guarda en una cookie HTTP-only
-            val token = (response as? Map<*, *>)?.get("token") as? String
-            if (token != null) {
-                servletResponse.addCookie(createAuthCookie(token))
-            }
+            // Guarda el token JWT en cookie HTTP-only
+            response.token?.let { servletResponse.addCookie(createAuthCookie(it)) }
 
-            // Remueve el token del response body (ahora está en la cookie)
-            val responseWithoutToken = (response as? Map<*, *>)?.toMutableMap()?.apply {
-                remove("token")
-            } ?: response
-
-            // Si todo va bien, devuelve respuesta exitosa (200 OK)
-            ResponseEntity.ok(responseWithoutToken)
+            // Retorna respuesta sin token en el body (va en cookie)
+            ResponseEntity.ok(response.copy(token = null))
 
         } catch (e: IllegalArgumentException) {
             // Captura errores de validación (ej: email duplicado, contraseñas no coinciden)
@@ -118,22 +111,13 @@ class AuthController(
         servletResponse: HttpServletResponse
     ): ResponseEntity<*> {
         return try {
-            // Intenta autenticar al usuario usando el servicio
             val response = authService.login(request)
 
-            // Extrae el token y lo guarda en una cookie HTTP-only
-            val token = (response as? Map<*, *>)?.get("token") as? String
-            if (token != null) {
-                servletResponse.addCookie(createAuthCookie(token))
-            }
+            // Guarda el token JWT en cookie HTTP-only
+            response.token?.let { servletResponse.addCookie(createAuthCookie(it)) }
 
-            // Remueve el token del response body (ahora está en la cookie)
-            val responseWithoutToken = (response as? Map<*, *>)?.toMutableMap()?.apply {
-                remove("token")
-            } ?: response
-
-            // Si las credenciales son correctas, devuelve respuesta exitosa (200 OK)
-            ResponseEntity.ok(responseWithoutToken)
+            // Retorna respuesta sin token en el body
+            ResponseEntity.ok(response.copy(token = null))
 
         } catch (e: IllegalArgumentException) {
             // Captura errores de autenticación (email o contraseña incorrectos)
@@ -165,22 +149,13 @@ class AuthController(
         servletResponse: HttpServletResponse
     ): ResponseEntity<*> {
         return try {
-            // Intenta autenticar al usuario con 2FA usando el servicio
             val response = authService.loginWith2FA(request)
 
-            // Extrae el token y lo guarda en una cookie HTTP-only
-            val token = (response as? Map<*, *>)?.get("token") as? String
-            if (token != null) {
-                servletResponse.addCookie(createAuthCookie(token))
-            }
+            // Guarda el token JWT en cookie HTTP-only
+            response.token?.let { servletResponse.addCookie(createAuthCookie(it)) }
 
-            // Remueve el token del response body (ahora está en la cookie)
-            val responseWithoutToken = (response as? Map<*, *>)?.toMutableMap()?.apply {
-                remove("token")
-            } ?: response
-
-            // Si las credenciales y código 2FA son correctos, devuelve respuesta exitosa (200 OK)
-            ResponseEntity.ok(responseWithoutToken)
+            // Retorna respuesta sin token en el body
+            ResponseEntity.ok(response.copy(token = null))
 
         } catch (e: IllegalArgumentException) {
             // Captura errores de autenticación (credenciales o código 2FA incorrectos)
@@ -217,18 +192,10 @@ class AuthController(
         return try {
             val response = authService.googleRegister(request)
 
-            // Extrae el token y lo guarda en una cookie HTTP-only
-            val token = (response as? Map<*, *>)?.get("token") as? String
-            if (token != null) {
-                servletResponse.addCookie(createAuthCookie(token))
-            }
+            // Guarda el token JWT en cookie HTTP-only
+            response.token?.let { servletResponse.addCookie(createAuthCookie(it)) }
 
-            // Remueve el token del response body (ahora está en la cookie)
-            val responseWithoutToken = (response as? Map<*, *>)?.toMutableMap()?.apply {
-                remove("token")
-            } ?: response
-
-            ResponseEntity.ok(responseWithoutToken)
+            ResponseEntity.ok(response.copy(token = null))
         } catch (e: IllegalArgumentException) {
             ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(mapOf("message" to (e.message ?: "Error en el registro con Google")))
@@ -260,21 +227,21 @@ class AuthController(
         @RequestBody request: GoogleRegisterWithTokenRequest,
         servletResponse: HttpServletResponse
     ): ResponseEntity<Any> {
+        println("DEBUG Controller: Recibido request - email: ${request.email}, name: ${request.name}, accountType: ${request.accountType}")
         return try {
             val response = authService.googleRegisterWithToken(request)
 
-            // Extrae el token y lo guarda en una cookie HTTP-only
-            val token = (response as? Map<*, *>)?.get("token") as? String
-                ?: response.token
-            if (token != null) {
-                servletResponse.addCookie(createAuthCookie(token))
-            }
+            // Guarda el token JWT en cookie HTTP-only
+            response.token?.let { servletResponse.addCookie(createAuthCookie(it)) }
 
-            ResponseEntity.ok(response)
+            ResponseEntity.ok(response.copy(token = null))
         } catch (e: IllegalArgumentException) {
+            println("ERROR IllegalArgument: ${e.message}")
             ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(mapOf("message" to (e.message ?: "Error en el registro con Google")))
         } catch (e: Exception) {
+            println("ERROR Exception: ${e::class.simpleName}: ${e.message}")
+            e.printStackTrace()
             ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(mapOf("message" to (e.message ?: "Error interno del servidor")))
         }
@@ -300,18 +267,10 @@ class AuthController(
         return try {
             val response = authService.googleLogin(request.credential)
 
-            // Extrae el token y lo guarda en una cookie HTTP-only
-            val token = (response as? Map<*, *>)?.get("token") as? String
-            if (token != null) {
-                servletResponse.addCookie(createAuthCookie(token))
-            }
+            // Guarda el token JWT en cookie HTTP-only
+            response.token?.let { servletResponse.addCookie(createAuthCookie(it)) }
 
-            // Remueve el token del response body (ahora está en la cookie)
-            val responseWithoutToken = (response as? Map<*, *>)?.toMutableMap()?.apply {
-                remove("token")
-            } ?: response
-
-            ResponseEntity.ok(responseWithoutToken)
+            ResponseEntity.ok(response.copy(token = null))
         } catch (e: IllegalArgumentException) {
             // Si el mensaje indica que el usuario no existe, devolver 404
             if (e.message?.contains("no encontrado", ignoreCase = true) == true ||
@@ -343,6 +302,42 @@ class AuthController(
         servletResponse.addCookie(createLogoutCookie())
 
         return ResponseEntity.ok(mapOf("message" to "Sesión cerrada exitosamente"))
+    }
+
+    /**
+     * Endpoint para eliminar (desactivar) la cuenta del usuario actual
+     *
+     * Ruta: DELETE http://localhost:8080/api/auth/delete-account
+     *
+     * @param request: Request HTTP para extraer el token de la cookie
+     * @param servletResponse: Response HTTP para eliminar la cookie
+     * @return ResponseEntity con:
+     *         - 200 OK: Cuenta eliminada exitosamente
+     *         - 401 UNAUTHORIZED: Token inválido o expirado
+     */
+    @DeleteMapping("/delete-account")
+    fun deleteAccount(
+        request: jakarta.servlet.http.HttpServletRequest,
+        servletResponse: HttpServletResponse
+    ): ResponseEntity<*> {
+        return try {
+            val token = request.cookies?.find { it.name == "authToken" }?.value
+                ?: throw IllegalArgumentException("No se encontró token de autenticación")
+
+            val email = authService.extractEmailFromToken(token)
+            authService.deleteAccount(email)
+
+            // Eliminar cookie de autenticación
+            servletResponse.addCookie(createLogoutCookie())
+
+            ResponseEntity.ok(mapOf("message" to "Cuenta eliminada exitosamente"))
+        } catch (e: IllegalArgumentException) {
+            ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(mapOf("message" to e.message))
+        } catch (e: Exception) {
+            ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(mapOf("message" to "Token inválido o expirado"))
+        }
     }
 
     /**

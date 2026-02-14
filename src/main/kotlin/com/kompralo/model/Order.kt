@@ -133,7 +133,11 @@ data class Order(
     val createdAt: LocalDateTime = LocalDateTime.now(),
 
     @Column(nullable = false)
-    var updatedAt: LocalDateTime = LocalDateTime.now()
+    var updatedAt: LocalDateTime = LocalDateTime.now(),
+
+    // Relación con items de la orden
+    @OneToMany(mappedBy = "order", cascade = [CascadeType.ALL], orphanRemoval = true, fetch = FetchType.LAZY)
+    val items: MutableList<OrderItem> = mutableListOf()
 ) {
     /**
      * Hook que se ejecuta antes de actualizar la entidad

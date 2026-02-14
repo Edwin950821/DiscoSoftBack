@@ -37,16 +37,27 @@ class AuthService(
      * @throws IllegalArgumentException si el email ya está registrado o el tipo de cuenta es inválido
      */
     fun register(request: RegisterRequest): AuthResponse {
-        // Valida que el email no exista
-        if (userRepository.existsByEmail(request.email)) {
-            throw IllegalArgumentException("El email ya está registrado")
-        }
-
         // Convierte accountType a Role
         val role = when (request.accountType.lowercase()) {
             "user" -> Role.USER
             "business" -> Role.BUSINESS
             else -> throw IllegalArgumentException("Tipo de cuenta inválido. Use 'user' o 'business'")
+        }
+
+        // Verifica si el usuario existe (puede estar desactivado)
+        val existingUser = userRepository.findByEmail(request.email)
+        if (existingUser.isPresent) {
+            val user = existingUser.get()
+            if (!user.isActive) {
+                // Reactivar cuenta eliminada
+                user.isActive = true
+                user.role = role
+                user.password = passwordEncoder.encode(request.password)
+                val savedUser = userRepository.save(user)
+                val token = jwtService.generateToken(savedUser.email, savedUser.role.name)
+                return AuthResponse(token = token, user = toUserResponse(savedUser))
+            }
+            throw IllegalArgumentException("El email ya está registrado")
         }
 
         // Crea el usuario con password hasheado
@@ -173,23 +184,32 @@ class AuthService(
 
             println("DEBUG: Datos extraídos de Google - Email: $email, Name: $name")
 
-            // Validar que el email no exista
-            if (userRepository.existsByEmail(email)) {
-                throw IllegalArgumentException("El email ya está registrado. Use el endpoint de login.")
-            }
-
             // Convertir accountType a Role según el tipo de usuario seleccionado
-            // "user" = Comprador (USER) | "business" = Vendedor (BUSINESS)
             val role = when (request.accountType.lowercase()) {
                 "user" -> Role.USER        // Comprador
                 "business" -> Role.BUSINESS // Vendedor (Comercio)
                 else -> throw IllegalArgumentException("Tipo de cuenta inválido. Use 'user' (Comprador) o 'business' (Vendedor)")
             }
 
+            // Verificar si el usuario existe (puede estar desactivado)
+            val existingUser = userRepository.findByEmail(email)
+            if (existingUser.isPresent) {
+                val user = existingUser.get()
+                if (!user.isActive) {
+                    // Reactivar cuenta eliminada
+                    user.isActive = true
+                    user.role = role
+                    val reactivated = userRepository.save(user)
+                    val token = jwtService.generateToken(reactivated.email, reactivated.role.name)
+                    return AuthResponse(token = token, user = toUserResponse(reactivated))
+                }
+                throw IllegalArgumentException("El email ya está registrado. Use el endpoint de login.")
+            }
+
             // Crear nuevo usuario con Google
             val user = User(
                 email = email,
-                password = passwordEncoder.encode(googleUserId), // Password dummy, no se usará
+                password = passwordEncoder.encode(googleUserId),
                 name = name,
                 role = role,
                 createdAt = LocalDateTime.now()
@@ -207,41 +227,54 @@ class AuthService(
             )
 
         } catch (e: IllegalArgumentException) {
-            // Re-lanzar errores de validación
+
             throw e
         } catch (e: Exception) {
-            // Log completo para debugging
+
             println("ERROR COMPLETO: ${e::class.simpleName}: ${e.message}")
             e.printStackTrace()
             throw Exception("Error al registrar con Google: ${e.message}")
         }
     }
 
-    /**
-     * Registra un nuevo usuario usando access_token de Google OAuth (flujo alternativo)
-     * Este método no valida el token con Google, confía en los datos del frontend
-     * @throws IllegalArgumentException si el email ya está registrado o el tipo de cuenta es inválido
-     */
-    fun googleRegisterWithToken(request: GoogleRegisterWithTokenRequest): AuthResponse {
-        println("DEBUG: Registrando usuario con Google Access Token...")
-        println("DEBUG: Email: ${request.email}, Name: ${request.name}, Access Token: ${request.access_token}")
 
-        // Validar que el email no exista
-        if (userRepository.existsByEmail(request.email)) {
-            throw IllegalArgumentException("El email ya está registrado. Use el endpoint de login.")
+    fun googleRegisterWithToken(request: GoogleRegisterWithTokenRequest): AuthResponse {
+        println("DEBUG: Google Auth con Access Token...")
+        println("DEBUG: Email: ${request.email}, Name: ${request.name}, GoogleId: ${request.getGoogleIdValue()}")
+
+
+        val existingUser = userRepository.findByEmail(request.email)
+        if (existingUser.isPresent) {
+            val user = existingUser.get()
+            if (!user.isActive) {
+
+                val role = when (request.accountType.lowercase()) {
+                    "user" -> Role.USER
+                    "business" -> Role.BUSINESS
+                    else -> Role.USER
+                }
+                user.isActive = true
+                user.role = role
+                userRepository.save(user)
+                println("DEBUG: Cuenta reactivada: ${user.email} con rol ${user.role}")
+                val token = jwtService.generateToken(user.email, user.role.name)
+                return AuthResponse(token = token, user = toUserResponse(user))
+            }
+            println("DEBUG: Usuario existente encontrado: ${user.email} con rol ${user.role}")
+            val token = jwtService.generateToken(user.email, user.role.name)
+            return AuthResponse(token = token, user = toUserResponse(user))
         }
 
-        // Convertir accountType a Role
         val role = when (request.accountType.lowercase()) {
             "user" -> Role.USER
             "business" -> Role.BUSINESS
             else -> throw IllegalArgumentException("Tipo de cuenta inválido. Use 'user' (Comprador) o 'business' (Vendedor)")
         }
 
-        // Crear nuevo usuario
+        val googleIdValue = request.getGoogleIdValue().ifEmpty { request.email }
         val user = User(
             email = request.email,
-            password = passwordEncoder.encode(request.googleId), // Password dummy
+            password = passwordEncoder.encode(googleIdValue),
             name = request.name,
             role = role,
             createdAt = LocalDateTime.now()
@@ -250,7 +283,6 @@ class AuthService(
         val savedUser = userRepository.save(user)
         println("DEBUG: Usuario creado exitosamente: ${savedUser.email} con rol ${savedUser.role}")
 
-        // Generar token JWT
         val token = jwtService.generateToken(savedUser.email, savedUser.role.name)
 
         return AuthResponse(
@@ -259,46 +291,38 @@ class AuthService(
         )
     }
 
-    /**
-     * Autentica un usuario con Google OAuth
-     * Si el usuario no existe, lo registra automáticamente con rol USER
-     * @throws Exception si el token es inválido o hay error en la autenticación
-     */
     fun googleLogin(credential: String): AuthResponse {
         try {
             println("DEBUG: Login con Google...")
             println("DEBUG: Client ID: $googleClientId")
 
-            // Configurar el verificador de Google ID Token
             val verifier = GoogleIdTokenVerifier.Builder(NetHttpTransport(), GsonFactory.getDefaultInstance())
                 .setAudience(listOf(googleClientId))
                 .build()
 
-            // Verificar el token con Google
+
             val idToken: GoogleIdToken = verifier.verify(credential)
                 ?: throw Exception("Token de Google inválido o expirado")
 
             val payload: GoogleIdToken.Payload = idToken.payload
 
-            // Extraer información del usuario
+
             val email = payload.email
             val name = payload["name"] as? String ?: email
             val googleUserId = payload.subject
 
             println("DEBUG: Buscando usuario: $email")
 
-            // Buscar usuario existente (sin auto-registro)
             val user = userRepository.findByEmail(email)
                 .orElseThrow { IllegalArgumentException("No tienes una cuenta registrada. Por favor regístrate primero.") }
 
             println("DEBUG: Usuario encontrado: ${user.email} con rol ${user.role}")
 
-            // Verificar que esté activo
+
             if (!user.isActive) {
                 throw IllegalArgumentException("Usuario inactivo")
             }
 
-            // Generar token JWT con rol
             val token = jwtService.generateToken(user.email, user.role.name)
 
             return AuthResponse(
@@ -307,19 +331,17 @@ class AuthService(
             )
 
         } catch (e: IllegalArgumentException) {
-            // Re-lanzar errores de validación
+
             throw e
         } catch (e: Exception) {
-            // Log completo para debugging
+
             println("ERROR COMPLETO: ${e::class.simpleName}: ${e.message}")
             e.printStackTrace()
             throw Exception("Error al autenticar con Google: ${e.message}")
         }
     }
 
-    /**
-     * Obtiene información de un usuario por email
-     */
+
     fun getUserByEmail(email: String): UserResponse {
         val user = userRepository.findByEmail(email)
             .orElseThrow { IllegalArgumentException("Usuario no encontrado") }
@@ -327,16 +349,21 @@ class AuthService(
         return toUserResponse(user)
     }
 
-    /**
-     * Extrae email desde token JWT (delegado a JwtService)
-     */
     fun extractEmailFromToken(token: String): String {
         return jwtService.extractEmailFromToken(token)
     }
 
-    /**
-     * Convierte User a UserResponse
-     */
+
+    @org.springframework.transaction.annotation.Transactional
+    fun deleteAccount(email: String) {
+        val user = userRepository.findByEmail(email)
+            .orElseThrow { IllegalArgumentException("Usuario no encontrado") }
+        user.isActive = false
+        userRepository.save(user)
+        println("DEBUG: Cuenta desactivada para: ${user.email}")
+    }
+
+
     private fun toUserResponse(user: User): UserResponse {
         return UserResponse(
             id = user.id ?: 0,

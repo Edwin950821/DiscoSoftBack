@@ -4,11 +4,10 @@ import com.kompralo.domain.auth.model.PasswordResetToken
 import com.kompralo.domain.auth.repository.PasswordResetTokenRepository
 import com.kompralo.infrastructure.persistence.mapper.PasswordResetTokenMapper
 import com.kompralo.infrastructure.persistence.repository.JpaPasswordResetTokenRepository
-import org.springframework.stereotype.Repository
 import org.springframework.transaction.annotation.Transactional
 import java.time.LocalDateTime
 
-@Repository
+// @Repository removido para evitar que Spring cree este bean (usa com.kompralo.repository en su lugar)
 class PasswordResetTokenRepositoryAdapter(
     private val jpaRepository: JpaPasswordResetTokenRepository,
     private val mapper: PasswordResetTokenMapper
