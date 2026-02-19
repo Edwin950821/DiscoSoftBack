@@ -26,7 +26,8 @@ data class GoogleRegisterWithTokenRequest(
     val name: String,
     val googleId: String? = null,       // ID único de Google (sub)
     val sub: String? = null,            // Alternativa para googleId
-    val accountType: String
+    val accountType: String,
+    val isLogin: Boolean = false        // true = login con Google, false = registro
 ) {
     // Obtener el token de cualquiera de los dos campos
     fun getToken(): String = access_token ?: accessToken ?: ""

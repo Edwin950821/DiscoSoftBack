@@ -68,7 +68,7 @@ data class Notification(
     val user: User,
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 50)
+    @Column(nullable = false, columnDefinition = "VARCHAR(50)")
     val type: NotificationType,
 
     @Column(nullable = false)
@@ -89,7 +89,7 @@ data class Notification(
     val relatedEntityId: Long? = null,
 
     @Enumerated(EnumType.STRING)
-    @Column(length = 20)
+    @Column(columnDefinition = "VARCHAR(20)")
     val relatedEntityType: RelatedEntityType? = null,
 
     @Column(nullable = false, updatable = false)

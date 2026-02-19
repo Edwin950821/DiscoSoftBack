@@ -33,6 +33,12 @@ data class StockBatch(
     @Column(precision = 15, scale = 2, nullable = false)
     val totalValue: BigDecimal,
 
+    @Column(length = 200)
+    var supplier: String? = null,
+
+    @Column(columnDefinition = "VARCHAR(20)")
+    var status: String = "ACTIVE",
+
     @Column(nullable = false, updatable = false)
     val createdAt: LocalDateTime = LocalDateTime.now()
 )

@@ -19,4 +19,14 @@ interface ProductRepository : JpaRepository<Product, Long> {
     fun existsBySku(sku: String): Boolean
 
     fun findBySku(sku: String): Product?
+
+    fun findByStatus(status: ProductStatus): List<Product>
+
+    fun findByStatusAndCategoryContainingIgnoreCase(status: ProductStatus, category: String): List<Product>
+
+    @Query("SELECT p FROM Product p WHERE p.status = :status AND LOWER(p.name) LIKE LOWER(CONCAT('%', :search, '%'))")
+    fun searchByStatusAndName(status: ProductStatus, search: String): List<Product>
+
+    @Query("SELECT p FROM Product p JOIN FETCH p.seller WHERE p.id IN :ids")
+    fun findAllByIdWithSeller(ids: List<Long>): List<Product>
 }

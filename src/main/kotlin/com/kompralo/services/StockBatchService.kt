@@ -2,12 +2,10 @@ package com.kompralo.services
 
 import com.kompralo.dto.*
 import com.kompralo.model.*
-import com.kompralo.repository.ProductRepository
-import com.kompralo.repository.StockBatchRepository
-import com.kompralo.repository.StockRestockRepository
-import com.kompralo.repository.UserRepository
+import com.kompralo.repository.*
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.math.BigDecimal
 import java.time.LocalDate
 import java.time.LocalDateTime
 
@@ -17,7 +15,8 @@ class StockBatchService(
     private val stockRestockRepository: StockRestockRepository,
     private val productRepository: ProductRepository,
     private val userRepository: UserRepository,
-    private val notificationService: NotificationService
+    private val inventoryMovementRepository: InventoryMovementRepository,
+    private val notificationService: NotificationService,
 ) {
 
     @Transactional
@@ -29,7 +28,7 @@ class StockBatchService(
         val seller = userRepository.findById(sellerId)
             .orElseThrow { RuntimeException("Vendedor no encontrado") }
 
-        val products = request.items.map { item ->
+        val itemsWithProduct = request.items.map { item ->
             if (item.quantity <= 0) {
                 throw RuntimeException("La cantidad debe ser mayor a 0")
             }
@@ -38,12 +37,12 @@ class StockBatchService(
             if (product.seller.id != sellerId) {
                 throw RuntimeException("No autorizado para reabastecer producto ${product.name}")
             }
-            product to item.quantity
+            Triple(product, item.quantity, item)
         }
 
-        val totalQuantity = products.sumOf { it.second }
-        val totalValue = products.sumOf { (product, qty) ->
-            product.price.multiply(java.math.BigDecimal(qty))
+        val totalQuantity = itemsWithProduct.sumOf { it.second }
+        val totalValue = itemsWithProduct.sumOf { (product, qty, _) ->
+            product.price.multiply(BigDecimal(qty))
         }
 
         val batchNumber = generateBatchNumber()
@@ -54,13 +53,14 @@ class StockBatchService(
                 seller = seller,
                 location = request.location,
                 notes = request.notes,
-                totalItems = products.size,
+                supplier = request.supplier,
+                totalItems = itemsWithProduct.size,
                 totalQuantity = totalQuantity,
-                totalValue = totalValue
+                totalValue = totalValue,
             )
         )
 
-        val itemResponses = products.map { (product, quantity) ->
+        val itemResponses = itemsWithProduct.map { (product, quantity, itemReq) ->
             val previousStock = product.stock
             product.restock(quantity)
             productRepository.save(product)
@@ -74,7 +74,25 @@ class StockBatchService(
                     restockDate = LocalDate.now(),
                     notes = "Lote: $batchNumber",
                     createdBy = seller,
-                    batch = batch
+                    batch = batch,
+                    unitCost = itemReq.unitCost ?: BigDecimal.ZERO,
+                    expiryDate = itemReq.expiryDate?.let { LocalDate.parse(it) },
+                    quantityRemaining = quantity,
+                )
+            )
+
+            // Record ENTRY movement
+            inventoryMovementRepository.save(
+                InventoryMovement(
+                    product = product,
+                    restock = restock,
+                    movementType = "ENTRY",
+                    quantity = quantity,
+                    resultingStock = product.stock,
+                    user = seller,
+                    referenceType = "BATCH",
+                    referenceId = batch.id,
+                    notes = "Entrada - Lote $batchNumber",
                 )
             )
 
@@ -85,32 +103,44 @@ class StockBatchService(
                 productImageUrl = product.imageUrl,
                 quantity = restock.quantity,
                 previousStock = restock.previousStock,
-                newStock = restock.newStock
+                newStock = restock.newStock,
+                unitCost = restock.unitCost,
+                expiryDate = restock.expiryDate?.toString(),
+                quantityRemaining = restock.quantityRemaining,
+                quantitySold = restock.quantitySold,
+                quantityDamaged = restock.quantityDamaged,
+                quantityReturned = restock.quantityReturned,
             )
         }
 
-        notificationService.createAndSend(
-            userId = sellerId,
-            type = NotificationType.STOCK_RESTOCKED,
-            title = "Lote de stock guardado",
-            message = "Lote #$batchNumber: ${products.size} productos actualizados, $totalQuantity unidades agregadas.",
-            priority = "low",
-            actionUrl = "/admin/inventory",
-            relatedEntityId = batch.id,
-            relatedEntityType = RelatedEntityType.PRODUCT
-        )
+        try {
+            notificationService.createAndSend(
+                userId = sellerId,
+                type = NotificationType.STOCK_RESTOCKED,
+                title = "Lote de stock guardado",
+                message = "Lote #$batchNumber: ${itemsWithProduct.size} productos actualizados, $totalQuantity unidades agregadas.",
+                priority = "low",
+                actionUrl = "/admin/inventory",
+                relatedEntityId = batch.id,
+                relatedEntityType = RelatedEntityType.PRODUCT,
+            )
+        } catch (e: Exception) {
+            println("[StockBatch] Error enviando notificación: ${e.message}")
+        }
 
         return BatchResponse(
             id = batch.id!!,
             batchNumber = batch.batchNumber,
             location = batch.location,
             notes = batch.notes,
+            supplier = batch.supplier,
+            status = batch.status,
             totalItems = batch.totalItems,
             totalQuantity = batch.totalQuantity,
             totalValue = batch.totalValue,
             createdByName = seller.name,
             createdAt = batch.createdAt,
-            items = itemResponses
+            items = itemResponses,
         )
     }
 
@@ -142,7 +172,13 @@ class StockBatchService(
                 productImageUrl = it.product.imageUrl,
                 quantity = it.quantity,
                 previousStock = it.previousStock,
-                newStock = it.newStock
+                newStock = it.newStock,
+                unitCost = it.unitCost,
+                expiryDate = it.expiryDate?.toString(),
+                quantityRemaining = it.quantityRemaining,
+                quantitySold = it.quantitySold,
+                quantityDamaged = it.quantityDamaged,
+                quantityReturned = it.quantityReturned,
             )
         }
 
@@ -151,12 +187,14 @@ class StockBatchService(
             batchNumber = batch.batchNumber,
             location = batch.location,
             notes = batch.notes,
+            supplier = batch.supplier,
+            status = batch.status,
             totalItems = batch.totalItems,
             totalQuantity = batch.totalQuantity,
             totalValue = batch.totalValue,
             createdByName = batch.seller.name,
             createdAt = batch.createdAt,
-            items = items
+            items = items,
         )
     }
 
@@ -169,10 +207,12 @@ class StockBatchService(
         id = id!!,
         batchNumber = batchNumber,
         location = location,
+        supplier = supplier,
+        status = status,
         totalItems = totalItems,
         totalQuantity = totalQuantity,
         totalValue = totalValue,
         createdByName = seller.name,
-        createdAt = createdAt
+        createdAt = createdAt,
     )
 }

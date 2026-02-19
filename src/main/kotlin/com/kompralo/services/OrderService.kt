@@ -208,6 +208,7 @@ class OrderService(
             )
         }
 
+        // Notificar al vendedor
         notificationService.createAndSend(
             userId = sellerId,
             type = notifType,
@@ -218,6 +219,63 @@ class OrderService(
             relatedEntityId = saved.id,
             relatedEntityType = RelatedEntityType.ORDER
         )
+
+        // Notificar al comprador
+        val buyerNotifMessage = when (newStatus) {
+            OrderStatus.CONFIRMED -> "Tu pedido ${order.orderNumber} ha sido confirmado por la tienda."
+            OrderStatus.PROCESSING -> "Tu pedido ${order.orderNumber} esta siendo preparado."
+            OrderStatus.SHIPPED -> "Tu pedido ${order.orderNumber} ha sido enviado."
+            OrderStatus.DELIVERED -> "Tu pedido ${order.orderNumber} ha sido entregado."
+            OrderStatus.CANCELLED -> "Tu pedido ${order.orderNumber} ha sido cancelado."
+            else -> "Tu pedido ${order.orderNumber} se actualizo a $newStatus."
+        }
+
+        notificationService.createAndSend(
+            userId = order.buyer.id!!,
+            type = notifType,
+            title = notifTitle,
+            message = buyerNotifMessage,
+            priority = if (newStatus == OrderStatus.CANCELLED) "high" else "medium",
+            actionUrl = "/mis-pedidos",
+            relatedEntityId = saved.id,
+            relatedEntityType = RelatedEntityType.ORDER
+        )
+
+        return saved.toResponse()
+    }
+
+    @Transactional
+    fun confirmPayment(id: Long, sellerId: Long): OrderResponse {
+        val order = orderRepository.findById(id)
+            .orElseThrow { RuntimeException("Pedido no encontrado") }
+
+        if (order.seller.id != sellerId) {
+            throw RuntimeException("No autorizado para confirmar pago de este pedido")
+        }
+
+        if (order.paymentStatus == "PAID") {
+            throw RuntimeException("Este pedido ya está marcado como pagado")
+        }
+
+        val method = order.paymentMethod ?: PaymentMethod.CASH_ON_DELIVERY
+        order.markAsPaid(method)
+        val saved = orderRepository.save(order)
+
+        // Notify buyer (non-blocking - don't fail payment confirmation if notification fails)
+        try {
+            notificationService.createAndSend(
+                userId = order.buyer.id!!,
+                type = NotificationType.PAYMENT_SUCCESS,
+                title = "Pago confirmado",
+                message = "El pago de tu pedido ${order.orderNumber} ha sido confirmado.",
+                priority = "medium",
+                actionUrl = "/mis-pedidos",
+                relatedEntityId = saved.id,
+                relatedEntityType = RelatedEntityType.ORDER
+            )
+        } catch (e: Exception) {
+            println("[OrderService] Error enviando notificación de pago: ${e.message}")
+        }
 
         return saved.toResponse()
     }

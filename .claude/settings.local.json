@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(powershell.exe -Command \"& ''C:\\\\Program Files\\\\PostgreSQL\\\\15\\\\bin\\\\psql.exe'' -U postgres -d kompralo -c \"\"SELECT tc.constraint_name, tc.table_name, kcu.column_name, ccu.table_name AS foreign_table_name FROM information_schema.table_constraints AS tc JOIN information_schema.key_column_usage AS kcu ON tc.constraint_name = kcu.constraint_name JOIN information_schema.constraint_column_usage AS ccu ON ccu.constraint_name = tc.constraint_name WHERE tc.constraint_type = ''FOREIGN KEY'' AND tc.table_name = ''orders'';\"\" 2>&1\")",
+      "Bash(powershell.exe -Command \"psql -U postgres -d kompralo -c ''SELECT constraint_name, table_name FROM information_schema.table_constraints WHERE table_name = ''''orders'''' AND constraint_type = ''''FOREIGN KEY'''';''\")",
+      "Bash(powershell.exe -Command \"Get-Command psql -ErrorAction SilentlyContinue; Get-ChildItem ''C:\\\\Program Files\\\\PostgreSQL\\\\'' -ErrorAction SilentlyContinue | Select-Object Name; Get-ChildItem ''C:\\\\Program Files \\(x86\\)\\\\PostgreSQL\\\\'' -ErrorAction SilentlyContinue | Select-Object Name\")",
+      "Bash(cmd /c \"\"\"C:\\\\Program Files\\\\PostgreSQL\\\\16\\\\bin\\\\psql.exe\"\" -U postgres -d kompralo -c \"\"SELECT tc.constraint_name, ccu.table_name AS ref_table FROM information_schema.table_constraints tc JOIN information_schema.constraint_column_usage ccu ON ccu.constraint_name = tc.constraint_name WHERE tc.constraint_type = ''FOREIGN KEY'' AND tc.table_name = ''orders'';\"\"\")",
+      "Bash(powershell.exe -Command:*)",
+      "Bash(cmd /c \"set PGPASSWORD=admin& \"\"C:\\\\Program Files\\\\PostgreSQL\\\\16\\\\bin\\\\psql.exe\"\" -U postgres -d kompralo -c \"\"SELECT tc.constraint_name, kcu.column_name, ccu.table_name AS ref_table FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu ON tc.constraint_name = kcu.constraint_name JOIN information_schema.constraint_column_usage ccu ON ccu.constraint_name = tc.constraint_name WHERE tc.constraint_type = ''FOREIGN KEY'' AND tc.table_name = ''orders'';\"\"\")",
+      "Bash(powershell.exe -NoProfile -Command \"$env:PGPASSWORD=''admin''; $result = & ''C:\\\\Program Files\\\\PostgreSQL\\\\16\\\\bin\\\\psql.exe'' -U postgres -d kompralo -t -A -c ''SELECT constraint_name, column_name FROM information_schema.key_column_usage WHERE table_name = ''''orders'''' AND constraint_name LIKE ''''fk%'''';'' 2>&1; Write-Output $result\")",
+      "Bash(cmd /c \"set PGPASSWORD=admin&& \"\"C:\\\\Program Files\\\\PostgreSQL\\\\16\\\\bin\\\\psql.exe\"\" -U postgres -d kompralo -f \"\"C:\\\\Users\\\\USUARIO\\\\Downloads\\\\auth-backend\\\\fix-fk.sql\"\" 2>&1\")",
+      "Bash(cmd /c \"set PGPASSWORD=admin&& \"\"C:\\\\Program Files\\\\PostgreSQL\\\\16\\\\bin\\\\psql.exe\"\" -U postgres -d kompralo -f \"\"C:\\\\Users\\\\USUARIO\\\\Downloads\\\\auth-backend\\\\fix-fk.sql\"\" > \"\"C:\\\\Users\\\\USUARIO\\\\Downloads\\\\auth-backend\\\\fix-fk-result.txt\"\" 2>&1\")",
+      "Bash(cmd /c \"set PGPASSWORD=admin && \"\"C:\\\\Program Files\\\\PostgreSQL\\\\16\\\\bin\\\\psql.exe\"\" -U postgres -d kompralo -c \"\"SELECT constraint_name FROM information_schema.table_constraints WHERE table_name=''orders'' AND constraint_type=''FOREIGN KEY'';\"\" > C:\\\\Users\\\\USUARIO\\\\Downloads\\\\auth-backend\\\\fk-result.txt 2>&1 && type C:\\\\Users\\\\USUARIO\\\\Downloads\\\\auth-backend\\\\fk-result.txt\")",
+      "Bash(cmd /c \"C:\\\\Users\\\\USUARIO\\\\Downloads\\\\auth-backend\\\\run-fix.bat\")",
+      "Bash(PGPASSWORD=admin psql:*)",
+      "Bash(PGPASSWORD=admin \"/c/Program Files/PostgreSQL/16/bin/psql.exe\":*)",
+      "Bash(netstat:*)",
+      "Bash(./gradlew compileKotlin:*)",
+      "Bash(wmic:*)",
+      "Bash(./gradlew bootRun:*)"
+    ]
+  }
+}

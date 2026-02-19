@@ -49,7 +49,8 @@ class SecurityConfig(
                         "/api/sellers/register",
                         "/api/sellers",
                         "/api/sellers/{id}",
-                        "/api/users/**"
+                        "/api/users/**",
+                        "/api/public/**"
                     ).permitAll()
                     .anyRequest().authenticated()
             }

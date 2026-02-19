@@ -57,7 +57,7 @@ class AuthService(
                 val token = jwtService.generateToken(savedUser.email, savedUser.role.name)
                 return AuthResponse(token = token, user = toUserResponse(savedUser))
             }
-            throw IllegalArgumentException("El email ya está registrado")
+            throw IllegalArgumentException("Este correo ya está registrado")
         }
 
         // Crea el usuario con password hasheado
@@ -203,7 +203,7 @@ class AuthService(
                     val token = jwtService.generateToken(reactivated.email, reactivated.role.name)
                     return AuthResponse(token = token, user = toUserResponse(reactivated))
                 }
-                throw IllegalArgumentException("El email ya está registrado. Use el endpoint de login.")
+                throw IllegalArgumentException("Este correo ya está registrado")
             }
 
             // Crear nuevo usuario con Google
@@ -247,7 +247,7 @@ class AuthService(
         if (existingUser.isPresent) {
             val user = existingUser.get()
             if (!user.isActive) {
-
+                // Reactivar cuenta eliminada
                 val role = when (request.accountType.lowercase()) {
                     "user" -> Role.USER
                     "business" -> Role.BUSINESS
@@ -260,9 +260,18 @@ class AuthService(
                 val token = jwtService.generateToken(user.email, user.role.name)
                 return AuthResponse(token = token, user = toUserResponse(user))
             }
-            println("DEBUG: Usuario existente encontrado: ${user.email} con rol ${user.role}")
-            val token = jwtService.generateToken(user.email, user.role.name)
-            return AuthResponse(token = token, user = toUserResponse(user))
+            if (request.isLogin) {
+                // Login con Google: devolver usuario existente
+                println("DEBUG: Login Google - usuario existente: ${user.email} con rol ${user.role}")
+                val token = jwtService.generateToken(user.email, user.role.name)
+                return AuthResponse(token = token, user = toUserResponse(user))
+            }
+            throw IllegalArgumentException("Este correo ya está registrado")
+        }
+
+        // Si es login pero el usuario no existe
+        if (request.isLogin) {
+            throw IllegalArgumentException("No tienes una cuenta registrada. Por favor regístrate primero.")
         }
 
         val role = when (request.accountType.lowercase()) {

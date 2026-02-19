@@ -132,6 +132,22 @@ class OrderController(
         }
     }
 
+    @PatchMapping("/{id}/confirm-payment")
+    fun confirmPayment(
+        @PathVariable id: Long,
+        authentication: Authentication
+    ): ResponseEntity<*> {
+        return try {
+            val sellerId = getSellerId(authentication)
+            ResponseEntity.ok(orderService.confirmPayment(id, sellerId))
+        } catch (e: Exception) {
+            println("[OrderController] confirmPayment error: ${e.message}")
+            e.printStackTrace()
+            ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(mapOf("message" to (e.message ?: "Error al confirmar pago")))
+        }
+    }
+
     @DeleteMapping("/{id}")
     fun deleteOrder(
         @PathVariable id: Long,
