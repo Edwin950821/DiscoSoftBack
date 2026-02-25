@@ -89,6 +89,7 @@ data class OrderResponse(
     val carrier: String?,
     val shippedAt: LocalDateTime?,
     val deliveredAt: LocalDateTime?,
+    val estimatedDeliveryDate: LocalDateTime?,
     val buyerNotes: String?,
     val sellerNotes: String?,
     val cancelledAt: LocalDateTime?,

@@ -96,4 +96,17 @@ interface OrderRepository : JpaRepository<Order, Long> {
 
     @Query("SELECT COUNT(DISTINCT o.buyer) FROM Order o WHERE o.seller = :seller")
     fun countDistinctBuyersBySeller(@Param("seller") seller: User): Long
+
+    @Query("SELECT COALESCE(SUM(o.total), 0) FROM Order o WHERE o.seller = :seller AND o.status = 'REFUNDED' AND o.updatedAt BETWEEN :startDate AND :endDate")
+    fun sumRefundedBySellerAndDateRange(
+        @Param("seller") seller: User,
+        @Param("startDate") startDate: LocalDateTime,
+        @Param("endDate") endDate: LocalDateTime
+    ): BigDecimal
+
+    @Query("SELECT o FROM Order o JOIN FETCH o.buyer JOIN FETCH o.seller LEFT JOIN FETCH o.items WHERE o.id = :id")
+    fun findByIdWithDetails(@Param("id") id: Long): Order?
+
+    @Query("SELECT o FROM Order o JOIN FETCH o.buyer JOIN FETCH o.seller LEFT JOIN FETCH o.items WHERE o.orderNumber = :orderNumber")
+    fun findByOrderNumberWithDetails(@Param("orderNumber") orderNumber: String): Order?
 }

@@ -21,6 +21,11 @@ data class CheckoutItemRequest(
 data class CheckoutResponse(
     val orders: List<CheckoutOrderSummary>,
     val totalAmount: BigDecimal,
+    val subtotalAmount: BigDecimal,
+    val totalTax: BigDecimal,
+    val totalShipping: BigDecimal,
+    val totalCodFee: BigDecimal,
+    val totalDiscount: BigDecimal = BigDecimal.ZERO,
 )
 
 data class CheckoutOrderSummary(
@@ -28,5 +33,10 @@ data class CheckoutOrderSummary(
     val orderNumber: String,
     val sellerName: String,
     val itemCount: Int,
+    val subtotal: BigDecimal,
+    val discount: BigDecimal = BigDecimal.ZERO,
+    val tax: BigDecimal,
+    val shipping: BigDecimal,
+    val codFee: BigDecimal,
     val total: BigDecimal,
 )

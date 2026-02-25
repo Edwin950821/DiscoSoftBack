@@ -10,7 +10,9 @@ import com.kompralo.repository.UserRepository
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
+import java.math.RoundingMode
 import java.util.UUID
+import java.util.concurrent.CompletableFuture
 
 @Service
 class CheckoutService(
@@ -20,7 +22,14 @@ class CheckoutService(
     private val notificationService: NotificationService,
     private val stockRestockRepository: StockRestockRepository,
     private val inventoryMovementRepository: InventoryMovementRepository,
+    private val pdfService: PdfService,
+    private val emailService: EmailService,
+    private val offerService: OfferService,
 ) {
+
+    private val IVA_RATE = BigDecimal("0.19")
+    private val COD_FEE = BigDecimal("5000")
+    private val SHIPPING_BASE = BigDecimal("8000")
 
     @Transactional
     fun checkout(buyerEmail: String, request: CheckoutRequest): CheckoutResponse {
@@ -31,7 +40,6 @@ class CheckoutService(
             throw RuntimeException("El carrito está vacío")
         }
 
-        // Parse payment method from string
         val paymentMethod: PaymentMethod? = request.paymentMethod?.let { pm ->
             try {
                 PaymentMethod.valueOf(pm)
@@ -40,12 +48,10 @@ class CheckoutService(
             }
         }
 
-        // Fetch all products with seller eagerly loaded to avoid lazy loading issues
         val productIds = request.items.map { it.productId }
         val products = productRepository.findAllByIdWithSeller(productIds)
         val productMap = products.associateBy { it.id!! }
 
-        // Validate each item
         for (item in request.items) {
             if (item.quantity <= 0) {
                 throw RuntimeException("La cantidad debe ser mayor a 0")
@@ -63,21 +69,30 @@ class CheckoutService(
             }
         }
 
-        // Group items by seller
         val itemsBySeller = request.items.groupBy { item ->
             productMap[item.productId]!!.seller.id!!
         }
 
+        val isCod = paymentMethod == PaymentMethod.CASH_ON_DELIVERY
+
         val orderSummaries = mutableListOf<CheckoutOrderSummary>()
         var grandTotal = BigDecimal.ZERO
+        var grandSubtotal = BigDecimal.ZERO
+        var grandTax = BigDecimal.ZERO
+        var grandShipping = BigDecimal.ZERO
+        var grandCodFee = BigDecimal.ZERO
+        var grandDiscount = BigDecimal.ZERO
 
         for ((sellerId, sellerItems) in itemsBySeller) {
             val seller = productMap[sellerItems.first().productId]!!.seller
             val orderNumber = generateOrderNumber()
 
-            // Calculate subtotal for this seller group
             var subtotal = BigDecimal.ZERO
+            var orderDiscount = BigDecimal.ZERO
+            var hasFreeShipping = false
             val orderItemsToCreate = mutableListOf<Pair<CheckoutItemRequest, Product>>()
+            // Track offers applied per item for recording usage after order is saved
+            val appliedOffers = mutableListOf<Triple<Offer, Product, BigDecimal>>()
 
             for (item in sellerItems) {
                 val product = productMap[item.productId]!!
@@ -86,17 +101,51 @@ class CheckoutService(
                 orderItemsToCreate.add(item to product)
             }
 
-            // Create order
+            // Check for applicable offers per item
+            data class ItemOfferInfo(
+                val offer: Offer?,
+                val discount: BigDecimal,
+                val discountPerUnit: BigDecimal
+            )
+            val itemOfferMap = mutableMapOf<Long, ItemOfferInfo>()
+
+            for (item in sellerItems) {
+                val product = productMap[item.productId]!!
+                try {
+                    val bestOffer = offerService.getBestOfferForProduct(product.id!!, item.quantity, buyer)
+                    if (bestOffer != null && offerService.canUserUseOffer(bestOffer, buyer)) {
+                        val discount = offerService.calculateDiscountForProduct(bestOffer, product, item.quantity)
+                        if (discount > BigDecimal.ZERO) {
+                            val discountPerUnit = discount.divide(item.quantity.toBigDecimal(), 2, RoundingMode.HALF_UP)
+                            itemOfferMap[product.id!!] = ItemOfferInfo(bestOffer, discount, discountPerUnit)
+                            orderDiscount = orderDiscount.add(discount)
+                        }
+                        if (bestOffer.type == OfferType.FREE_SHIPPING) {
+                            hasFreeShipping = true
+                        }
+                    }
+                } catch (e: Exception) {
+                    println("[Checkout] Offer lookup error for product ${product.id}: ${e.message}")
+                }
+            }
+
+            // Recalculate subtotal after discounts
+            val discountedSubtotal = subtotal.subtract(orderDiscount)
+            val tax = discountedSubtotal.multiply(IVA_RATE).setScale(0, RoundingMode.HALF_UP)
+            val shipping = if (hasFreeShipping) BigDecimal.ZERO else SHIPPING_BASE
+            val codFee = if (isCod) COD_FEE else BigDecimal.ZERO
+            val total = discountedSubtotal.add(tax).add(shipping).add(codFee)
+
             val order = Order(
                 buyer = buyer,
                 seller = seller,
                 orderNumber = orderNumber,
                 status = OrderStatus.PENDING,
                 subtotal = subtotal,
-                discount = BigDecimal.ZERO,
-                shipping = BigDecimal.ZERO,
-                tax = BigDecimal.ZERO,
-                total = subtotal,
+                discount = orderDiscount,
+                shipping = shipping.add(codFee),
+                tax = tax,
+                total = total,
                 paymentMethod = paymentMethod,
                 shippingAddress = request.shippingAddress,
                 shippingCity = request.shippingCity,
@@ -108,9 +157,11 @@ class CheckoutService(
 
             val savedOrder = orderRepository.save(order)
 
-            // Create order items + deduct stock
             for ((item, product) in orderItemsToCreate) {
-                val itemSubtotal = product.price.multiply(item.quantity.toBigDecimal())
+                val offerInfo = itemOfferMap[product.id!!]
+                val unitPrice = if (offerInfo != null) product.price.subtract(offerInfo.discountPerUnit) else product.price
+                val itemDiscount = offerInfo?.discount ?: BigDecimal.ZERO
+                val itemSubtotal = unitPrice.multiply(item.quantity.toBigDecimal())
 
                 val orderItem = OrderItem(
                     order = savedOrder,
@@ -119,18 +170,22 @@ class CheckoutService(
                     productSku = product.sku,
                     productImageUrl = product.imageUrl,
                     quantity = item.quantity,
-                    unitPrice = product.price,
+                    unitPrice = unitPrice,
+                    originalPrice = if (offerInfo != null) product.price else null,
+                    discount = itemDiscount,
                     subtotal = itemSubtotal,
                 )
                 savedOrder.items.add(orderItem)
 
-                // Deduct stock
+                if (offerInfo?.offer != null) {
+                    appliedOffers.add(Triple(offerInfo.offer, product, offerInfo.discount))
+                }
+
                 product.stock -= item.quantity
                 product.sales += item.quantity
                 product.updateStockStatus()
                 productRepository.save(product)
 
-                // FIFO: deduct from oldest restock batches
                 try {
                     val restocks = stockRestockRepository.findByProductIdWithRemainingFIFO(product.id!!)
                     var remaining = item.quantity
@@ -146,7 +201,6 @@ class CheckoutService(
                     println("[Checkout] FIFO deduction error: ${e.message}")
                 }
 
-                // Record SALE movement
                 try {
                     inventoryMovementRepository.save(
                         InventoryMovement(
@@ -165,13 +219,27 @@ class CheckoutService(
                 }
             }
 
-            // Auto-mark as PAID for online payment methods (not cash on delivery)
             if (paymentMethod != null && paymentMethod != PaymentMethod.CASH_ON_DELIVERY) {
                 savedOrder.markAsPaid(paymentMethod)
             }
 
             val finalOrder = orderRepository.save(savedOrder)
-            grandTotal = grandTotal.add(subtotal)
+
+            // Record offer usages
+            for ((offer, _, discount) in appliedOffers) {
+                try {
+                    offerService.recordUsage(offer, buyer, finalOrder, discount)
+                } catch (e: Exception) {
+                    println("[Checkout] Offer usage recording error: ${e.message}")
+                }
+            }
+
+            grandTotal = grandTotal.add(total)
+            grandSubtotal = grandSubtotal.add(subtotal)
+            grandDiscount = grandDiscount.add(orderDiscount)
+            grandTax = grandTax.add(tax)
+            grandShipping = grandShipping.add(shipping)
+            grandCodFee = grandCodFee.add(codFee)
 
             orderSummaries.add(
                 CheckoutOrderSummary(
@@ -179,17 +247,21 @@ class CheckoutService(
                     orderNumber = orderNumber,
                     sellerName = seller.name,
                     itemCount = sellerItems.size,
-                    total = subtotal,
+                    subtotal = subtotal,
+                    discount = orderDiscount,
+                    tax = tax,
+                    shipping = shipping,
+                    codFee = codFee,
+                    total = total,
                 )
             )
 
-            // Notify seller (non-blocking)
             try {
                 notificationService.createAndSend(
                     userId = sellerId,
                     type = NotificationType.NEW_ORDER,
                     title = "Nuevo pedido recibido",
-                    message = "Pedido $orderNumber de ${buyer.name} por \$${subtotal}.",
+                    message = "Pedido $orderNumber de ${buyer.name} por \$${total}.",
                     priority = "high",
                     actionUrl = "/admin/orders",
                     relatedEntityId = finalOrder.id,
@@ -198,11 +270,52 @@ class CheckoutService(
             } catch (e: Exception) {
                 println("[Checkout] Error enviando notificación: ${e.message}")
             }
+
+            val buyerEmailVal = buyer.email
+            val buyerNameVal = buyer.name
+            val sellerEmailVal = seller.email
+            val sellerNameVal = seller.name
+            val orderId = finalOrder.id!!
+            val itemCount = sellerItems.size
+
+            CompletableFuture.runAsync {
+                try {
+                    val pdfBytes = pdfService.generateReceiptById(orderId)
+                    if (pdfBytes != null) {
+                        emailService.sendOrderConfirmationToBuyer(
+                            buyerEmail = buyerEmailVal,
+                            buyerName = buyerNameVal,
+                            orderNumber = orderNumber,
+                            total = total,
+                            itemCount = itemCount,
+                            sellerName = sellerNameVal,
+                            pdfReceipt = pdfBytes
+                        )
+                    }
+
+                    emailService.sendNewOrderNotificationToStore(
+                        sellerEmail = sellerEmailVal,
+                        sellerName = sellerNameVal,
+                        orderNumber = orderNumber,
+                        buyerName = buyerNameVal,
+                        total = total,
+                        itemCount = itemCount
+                    )
+                } catch (e: Exception) {
+                    println("[Checkout] Error enviando emails: ${e.message}")
+                    e.printStackTrace()
+                }
+            }
         }
 
         return CheckoutResponse(
             orders = orderSummaries,
             totalAmount = grandTotal,
+            subtotalAmount = grandSubtotal,
+            totalTax = grandTax,
+            totalShipping = grandShipping,
+            totalCodFee = grandCodFee,
+            totalDiscount = grandDiscount,
         )
     }
 

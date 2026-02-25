@@ -43,7 +43,17 @@ enum class NotificationType {
     TASK_DUE_SOON,
     TASK_OVERDUE,
 
-   
+    RETURN_REQUESTED,
+    RETURN_APPROVED,
+    RETURN_REJECTED,
+    RETURN_COMPLETED,
+    REFUND_PROCESSED,
+
+    DELAY_CLAIM_RECEIVED,
+    DELAY_CLAIM_ESCALATED,
+    CLAIM_RESOLVED,
+    CLAIM_EXTENDED,
+
     MESSAGE_RECEIVED,
     SYSTEM_UPDATE,
     WELCOME
@@ -53,7 +63,10 @@ enum class RelatedEntityType {
     PRODUCT,
     TASK,
     ORDER,
-    USER
+    USER,
+    RETURN_REQUEST,
+    SHIPPING_CLAIM,
+    OFFER
 }
 
 @Entity

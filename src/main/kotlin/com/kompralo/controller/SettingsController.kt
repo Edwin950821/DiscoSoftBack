@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.*
 class SettingsController(
     private val settingsService: SettingsService
 ) {
+
     @GetMapping("/store")
     fun getStoreProfile(authentication: Authentication): ResponseEntity<*> {
         return try {

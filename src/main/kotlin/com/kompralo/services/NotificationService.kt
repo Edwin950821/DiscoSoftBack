@@ -2,10 +2,12 @@ package com.kompralo.services
 
 import com.kompralo.dto.NotificationPageResponse
 import com.kompralo.dto.NotificationResponse
+import com.kompralo.dto.PushNotificationPayload
 import com.kompralo.dto.UnreadCountResponse
 import com.kompralo.model.*
 import com.kompralo.repository.NotificationRepository
 import com.kompralo.repository.UserRepository
+import org.slf4j.LoggerFactory
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Service
@@ -15,8 +17,10 @@ import org.springframework.transaction.annotation.Transactional
 class NotificationService(
     private val notificationRepository: NotificationRepository,
     private val userRepository: UserRepository,
-    private val socketIOService: SocketIOService
+    private val socketIOService: SocketIOService,
+    private val pushNotificationService: PushNotificationService
 ) {
+    private val logger = LoggerFactory.getLogger(NotificationService::class.java)
 
     @Transactional
     fun createAndSend(
@@ -46,7 +50,30 @@ class NotificationService(
         val saved = notificationRepository.save(notification)
         val response = saved.toResponse()
 
+        // Socket.IO: entrega en tiempo real (usuario con app abierta)
         socketIOService.sendToUser(userId, "notification", response)
+
+        // FCM: push notification (usuario con app cerrada/background)
+        try {
+            pushNotificationService.sendToUser(
+                user,
+                PushNotificationPayload(
+                    title = title,
+                    body = message,
+                    actionUrl = actionUrl,
+                    notificationType = type.name,
+                    data = buildMap {
+                        put("notificationId", saved.id.toString())
+                        put("type", type.name)
+                        put("priority", priority)
+                        relatedEntityId?.let { put("relatedEntityId", it.toString()) }
+                        relatedEntityType?.let { put("relatedEntityType", it.name) }
+                    }
+                )
+            )
+        } catch (e: Exception) {
+            logger.warn("FCM push failed for user $userId: ${e.message}")
+        }
 
         return response
     }

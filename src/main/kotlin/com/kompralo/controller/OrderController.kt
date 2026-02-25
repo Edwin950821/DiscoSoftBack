@@ -4,9 +4,14 @@ import com.kompralo.dto.CreateOrderRequest
 import com.kompralo.dto.UpdateOrderRequest
 import com.kompralo.dto.UpdateOrderStatusRequest
 import com.kompralo.model.OrderStatus
+import com.kompralo.repository.OrderRepository
 import com.kompralo.repository.UserRepository
 import com.kompralo.services.OrderService
+import com.kompralo.services.PdfService
+import org.slf4j.LoggerFactory
+import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
+import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.*
@@ -17,12 +22,14 @@ import java.time.LocalDateTime
 @CrossOrigin(origins = ["http://localhost:5173"], allowCredentials = "true")
 class OrderController(
     private val orderService: OrderService,
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
+    private val orderRepository: OrderRepository,
+    private val pdfService: PdfService
 ) {
+    private val logger = LoggerFactory.getLogger(OrderController::class.java)
 
     private fun getSellerId(authentication: Authentication): Long {
-        val email = authentication.name
-        val user = userRepository.findByEmail(email)
+        val user = userRepository.findByEmail(authentication.name)
             .orElseThrow { RuntimeException("Usuario no encontrado") }
         return user.id!!
     }
@@ -34,8 +41,7 @@ class OrderController(
         authentication: Authentication
     ): ResponseEntity<*> {
         return try {
-            val email = authentication.name
-            val orders = orderService.getOrdersBySeller(email, status, search)
+            val orders = orderService.getOrdersBySeller(authentication.name, status, search)
             ResponseEntity.ok(mapOf("orders" to orders, "total" to orders.size))
         } catch (e: Exception) {
             ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -46,11 +52,10 @@ class OrderController(
     @GetMapping("/stats")
     fun getOrderStats(authentication: Authentication): ResponseEntity<*> {
         return try {
-            val email = authentication.name
-            ResponseEntity.ok(orderService.getOrderStats(email))
+            ResponseEntity.ok(orderService.getOrderStats(authentication.name))
         } catch (e: Exception) {
             ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(mapOf("message" to (e.message ?: "Error al obtener estadísticas")))
+                .body(mapOf("message" to (e.message ?: "Error al obtener estadisticas")))
         }
     }
 
@@ -62,10 +67,9 @@ class OrderController(
         authentication: Authentication
     ): ResponseEntity<*> {
         return try {
-            val email = authentication.name
             val start = startDate?.let { LocalDateTime.parse(it) }
             val end = endDate?.let { LocalDateTime.parse(it) }
-            val orders = orderService.getOrdersForExport(email, status, start, end)
+            val orders = orderService.getOrdersForExport(authentication.name, status, start, end)
             ResponseEntity.ok(orders)
         } catch (e: Exception) {
             ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -141,10 +145,58 @@ class OrderController(
             val sellerId = getSellerId(authentication)
             ResponseEntity.ok(orderService.confirmPayment(id, sellerId))
         } catch (e: Exception) {
-            println("[OrderController] confirmPayment error: ${e.message}")
-            e.printStackTrace()
+            logger.error("confirmPayment error for order $id", e)
             ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(mapOf("message" to (e.message ?: "Error al confirmar pago")))
+        }
+    }
+
+    @GetMapping("/{id}/receipt")
+    fun downloadReceipt(
+        @PathVariable id: Long,
+        authentication: Authentication
+    ): ResponseEntity<*> {
+        return try {
+            val sellerId = getSellerId(authentication)
+            val order = orderRepository.findByIdWithDetails(id)
+                ?: throw RuntimeException("Pedido no encontrado")
+
+            if (order.seller.id != sellerId) {
+                throw RuntimeException("No autorizado para descargar este comprobante")
+            }
+
+            if (order.paymentStatus != "PAID") {
+                throw RuntimeException("Solo se puede generar comprobante de pedidos con pago confirmado")
+            }
+
+            val pdfBytes = pdfService.generateReceiptById(id)
+                ?: throw RuntimeException("Error al generar el comprobante PDF")
+
+            ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=Factura_KMP-${order.orderNumber}.pdf")
+                .contentType(MediaType.APPLICATION_PDF)
+                .contentLength(pdfBytes.size.toLong())
+                .body(pdfBytes)
+        } catch (e: Exception) {
+            logger.error("downloadReceipt error for order $id", e)
+            ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(mapOf("message" to (e.message ?: "Error al generar comprobante")))
+        }
+    }
+
+    @PostMapping("/{id}/send-invoice")
+    fun sendInvoice(
+        @PathVariable id: Long,
+        authentication: Authentication
+    ): ResponseEntity<*> {
+        return try {
+            val sellerId = getSellerId(authentication)
+            ResponseEntity.ok(orderService.sendInvoice(id, sellerId))
+        } catch (e: Exception) {
+            logger.error("sendInvoice error for order $id", e)
+            ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(mapOf("message" to (e.message ?: "Error al enviar factura")))
         }
     }
 

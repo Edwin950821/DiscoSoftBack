@@ -40,6 +40,11 @@ class FinanceService(
         return orderRepository.sumTotalBySellerAndDateRange(seller, start, end)
     }
 
+    private fun refundsForMonth(seller: User, ym: YearMonth): BigDecimal {
+        val (start, end) = monthRange(ym)
+        return orderRepository.sumRefundedBySellerAndDateRange(seller, start, end)
+    }
+
     private fun ordersForMonth(seller: User, ym: YearMonth): Long {
         val (start, end) = monthRange(ym)
         return orderRepository.countOrdersBySellerAndDateRange(seller, start, end)
@@ -64,8 +69,10 @@ class FinanceService(
         val seller = findSeller(email)
         val now = YearMonth.now()
         val prev = now.minusMonths(1)
-        val income = revenueForMonth(seller, now)
-        val prevIncome = revenueForMonth(seller, prev)
+        val grossIncome = revenueForMonth(seller, now)
+        val refunds = refundsForMonth(seller, now)
+        val income = grossIncome.subtract(refunds)
+        val prevIncome = revenueForMonth(seller, prev).subtract(refundsForMonth(seller, prev))
         val expenses = income.multiply(EXPENSE_RATIO).setScale(0, RoundingMode.HALF_UP)
         val balance = income.subtract(expenses)
         val pendingOrders = orderRepository.countBySellerAndStatus(seller, OrderStatus.CONFIRMED) +
@@ -296,7 +303,7 @@ class FinanceService(
         val (start, end) = monthRange(now)
         val orders = orderRepository.findBySellerAndCreatedAtBetween(seller, start, end)
         val byCity = orders.filter { it.status != OrderStatus.CANCELLED && it.status != OrderStatus.REFUNDED }
-            .groupBy { it.shippingCity }
+            .groupBy { it.shippingCity ?: "Sin ciudad" }
         return byCity.map { (city, cityOrders) ->
             val revenue = cityOrders.sumOf { it.total }
             RegionalPerformanceResponse(region = city, subtitle = "", revenue = revenue, yoyChange = 0.0)

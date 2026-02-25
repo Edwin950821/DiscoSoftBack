@@ -18,6 +18,8 @@ interface ProductRepository : JpaRepository<Product, Long> {
 
     fun existsBySku(sku: String): Boolean
 
+    fun existsBySkuAndSellerId(sku: String, sellerId: Long): Boolean
+
     fun findBySku(sku: String): Product?
 
     fun findByStatus(status: ProductStatus): List<Product>

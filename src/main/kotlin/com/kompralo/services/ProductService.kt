@@ -42,7 +42,7 @@ class ProductService(
         val seller = userRepository.findById(sellerId)
             .orElseThrow { RuntimeException("Vendedor no encontrado") }
 
-        if (productRepository.existsBySku(request.sku)) {
+        if (productRepository.existsBySkuAndSellerId(request.sku, sellerId)) {
             throw RuntimeException("El SKU '${request.sku}' ya existe")
         }
 
@@ -83,8 +83,7 @@ class ProductService(
 
         request.name?.let { product.name = it }
         request.sku?.let { sku ->
-            val existing = productRepository.findBySku(sku)
-            if (existing != null && existing.id != id) {
+            if (sku != product.sku && productRepository.existsBySkuAndSellerId(sku, sellerId)) {
                 throw RuntimeException("El SKU '$sku' ya está en uso")
             }
             product.sku = sku

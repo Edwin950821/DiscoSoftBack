@@ -20,12 +20,9 @@ class CheckoutController(
         authentication: Authentication,
     ): ResponseEntity<*> {
         return try {
-            println("[Checkout] User: ${authentication.name}, Items: ${request.items.size}, PaymentMethod: ${request.paymentMethod}")
             val response = checkoutService.checkout(authentication.name, request)
             ResponseEntity.status(HttpStatus.CREATED).body(response)
         } catch (e: Exception) {
-            println("[Checkout] ERROR: ${e.javaClass.simpleName} - ${e.message}")
-            e.printStackTrace()
             ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(mapOf("message" to (e.message ?: "Error al procesar el pedido")))
         }

@@ -50,7 +50,8 @@ class SecurityConfig(
                         "/api/sellers",
                         "/api/sellers/{id}",
                         "/api/users/**",
-                        "/api/public/**"
+                        "/api/public/**",
+                        "/uploads/**"
                     ).permitAll()
                     .anyRequest().authenticated()
             }

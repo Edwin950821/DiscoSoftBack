@@ -115,6 +115,8 @@ data class Order(
 
     var deliveredAt: LocalDateTime? = null,
 
+    var estimatedDeliveryDate: LocalDateTime? = null,
+
     // Notas y observaciones
     @Column(columnDefinition = "TEXT")
     var buyerNotes: String? = null,
@@ -154,7 +156,12 @@ data class Order(
         status = newStatus
 
         when (newStatus) {
-            OrderStatus.SHIPPED -> shippedAt = LocalDateTime.now()
+            OrderStatus.SHIPPED -> {
+                shippedAt = LocalDateTime.now()
+                if (estimatedDeliveryDate == null) {
+                    estimatedDeliveryDate = LocalDateTime.now().plusDays(5)
+                }
+            }
             OrderStatus.DELIVERED -> deliveredAt = LocalDateTime.now()
             OrderStatus.CANCELLED -> cancelledAt = LocalDateTime.now()
             else -> {}
@@ -174,7 +181,7 @@ data class Order(
      * Verifica si la orden puede ser cancelada
      */
     fun canBeCancelled(): Boolean {
-        return status in listOf(OrderStatus.PENDING, OrderStatus.CONFIRMED)
+        return status in listOf(OrderStatus.PENDING, OrderStatus.CONFIRMED, OrderStatus.PROCESSING)
     }
 
     /**

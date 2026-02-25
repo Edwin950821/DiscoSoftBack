@@ -6,6 +6,7 @@ import com.kompralo.repository.OrderRepository
 import com.kompralo.repository.OrderItemRepository
 import com.kompralo.repository.ProductRepository
 import com.kompralo.repository.UserRepository
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
@@ -18,13 +19,16 @@ class OrderService(
     private val orderItemRepository: OrderItemRepository,
     private val productRepository: ProductRepository,
     private val userRepository: UserRepository,
-    private val notificationService: NotificationService
+    private val notificationService: NotificationService,
+    private val pdfService: PdfService,
+    private val emailService: EmailService
 ) {
+    private val logger = LoggerFactory.getLogger(OrderService::class.java)
 
     companion object {
         private val VALID_TRANSITIONS = mapOf(
             OrderStatus.PENDING to listOf(OrderStatus.CONFIRMED, OrderStatus.CANCELLED),
-            OrderStatus.CONFIRMED to listOf(OrderStatus.PROCESSING, OrderStatus.CANCELLED),
+            OrderStatus.CONFIRMED to listOf(OrderStatus.SHIPPED, OrderStatus.PROCESSING, OrderStatus.CANCELLED),
             OrderStatus.PROCESSING to listOf(OrderStatus.SHIPPED, OrderStatus.CANCELLED),
             OrderStatus.SHIPPED to listOf(OrderStatus.DELIVERED),
             OrderStatus.DELIVERED to listOf(OrderStatus.REFUNDED),
@@ -72,7 +76,6 @@ class OrderService(
 
         // Calcular subtotal desde los items
         var subtotal = BigDecimal.ZERO
-        val orderItems = mutableListOf<OrderItem>()
 
         for (itemRequest in request.items) {
             if (itemRequest.quantity <= 0) {
@@ -124,9 +127,9 @@ class OrderService(
 
         val savedOrder = orderRepository.save(order)
 
-        // Crear items con snapshot de producto
         for (itemRequest in request.items) {
-            val product = productRepository.findById(itemRequest.productId).get()
+            val product = productRepository.findById(itemRequest.productId)
+                .orElseThrow { RuntimeException("Producto con ID ${itemRequest.productId} no encontrado") }
             val itemSubtotal = itemRequest.unitPrice.multiply(itemRequest.quantity.toBigDecimal()).subtract(itemRequest.discount)
 
             val orderItem = OrderItem(
@@ -274,10 +277,47 @@ class OrderService(
                 relatedEntityType = RelatedEntityType.ORDER
             )
         } catch (e: Exception) {
-            println("[OrderService] Error enviando notificación de pago: ${e.message}")
+            logger.warn("Error enviando notificacion de pago para pedido ${order.orderNumber}: ${e.message}")
         }
 
         return saved.toResponse()
+    }
+
+    @Transactional(readOnly = true)
+    fun sendInvoice(id: Long, sellerId: Long): Map<String, String> {
+        val order = orderRepository.findByIdWithDetails(id)
+            ?: throw RuntimeException("Pedido no encontrado")
+
+        if (order.seller.id != sellerId) {
+            throw RuntimeException("No autorizado para enviar factura de este pedido")
+        }
+
+        if (order.paymentStatus != "PAID") {
+            throw RuntimeException("Solo se puede enviar factura de pedidos con pago confirmado")
+        }
+
+        val pdf = try {
+            pdfService.generateReceipt(order)
+        } catch (e: Exception) {
+            logger.error("Error generando PDF para pedido ${order.orderNumber}: ${e.message}", e)
+            throw RuntimeException("Error al generar la factura PDF: ${e.message}")
+        }
+
+        val sent = emailService.sendOrderConfirmationToBuyer(
+            buyerEmail = order.buyer.email,
+            buyerName = order.buyer.name,
+            orderNumber = order.orderNumber,
+            total = order.total,
+            itemCount = order.items.size,
+            sellerName = order.seller.name,
+            pdfReceipt = pdf
+        )
+
+        if (!sent) {
+            throw RuntimeException("No se pudo enviar el correo a ${order.buyer.email}. Revisa la configuración de Gmail API.")
+        }
+
+        return mapOf("message" to "Factura enviada exitosamente a ${order.buyer.email}")
     }
 
     @Transactional
@@ -406,6 +446,7 @@ class OrderService(
             carrier = carrier,
             shippedAt = shippedAt,
             deliveredAt = deliveredAt,
+            estimatedDeliveryDate = estimatedDeliveryDate,
             buyerNotes = buyerNotes,
             sellerNotes = sellerNotes,
             cancelledAt = cancelledAt,
