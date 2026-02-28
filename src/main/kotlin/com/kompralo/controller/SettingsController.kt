@@ -5,6 +5,7 @@ import com.kompralo.services.SettingsService
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
+import org.slf4j.LoggerFactory
 import org.springframework.web.bind.annotation.*
 
 @RestController
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.*
 class SettingsController(
     private val settingsService: SettingsService
 ) {
+    private val log = LoggerFactory.getLogger(SettingsController::class.java)
 
     @GetMapping("/store")
     fun getStoreProfile(authentication: Authentication): ResponseEntity<*> {
@@ -30,8 +32,10 @@ class SettingsController(
         authentication: Authentication
     ): ResponseEntity<*> {
         return try {
+            log.info("updateStoreProfile called by: ${authentication.name}, request: $request")
             ResponseEntity.ok(settingsService.updateStoreProfile(authentication.name, request))
         } catch (e: Exception) {
+            log.error("Error en updateStoreProfile para ${authentication.name}", e)
             ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(mapOf("message" to (e.message ?: "Error al actualizar perfil")))
         }

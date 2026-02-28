@@ -67,13 +67,14 @@ class SellerProfileService(
 
         return AuthResponse(
             token = token,
-            user = UserResponse(
-                id = savedUser.id ?: 0,
-                email = savedUser.email,
-                name = savedUser.name,
-                role = savedUser.role,
-                createdAt = savedUser.createdAt.toString()
-            ),
+            active = savedUser.isActive,
+            code = savedUser.code ?: "",
+            company_uuid = savedUser.companyUuid ?: "",
+            created_at = savedUser.createdAt.toString(),
+            last_modified_at = savedUser.updatedAt.toString(),
+            username = savedUser.username ?: savedUser.email,
+            uuid = savedUser.uuid ?: "",
+            role = savedUser.role.name,
             message = "Vendedor registrado exitosamente. Tu cuenta está pendiente de verificación."
         )
     }

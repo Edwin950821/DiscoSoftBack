@@ -7,6 +7,7 @@ import com.kompralo.repository.OfferUsageRepository
 import com.kompralo.repository.ProductRepository
 import com.kompralo.repository.SpecialDayRepository
 import org.slf4j.LoggerFactory
+import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
@@ -19,7 +20,9 @@ class OfferService(
     private val offerRepository: OfferRepository,
     private val offerUsageRepository: OfferUsageRepository,
     private val specialDayRepository: SpecialDayRepository,
-    private val productRepository: ProductRepository
+    private val productRepository: ProductRepository,
+    private val offerEmailService: OfferEmailService,
+    private val pushNotificationService: PushNotificationService
 ) {
     private val logger = LoggerFactory.getLogger(OfferService::class.java)
 
@@ -28,7 +31,7 @@ class OfferService(
         if (request.endDate.isBefore(request.startDate)) {
             throw RuntimeException("La fecha de fin debe ser posterior a la fecha de inicio")
         }
-        if (request.discountValue <= BigDecimal.ZERO) {
+        if (request.type != OfferType.FREE_SHIPPING && request.discountValue <= BigDecimal.ZERO) {
             throw RuntimeException("El valor del descuento debe ser mayor a 0")
         }
         if (request.type == OfferType.PERCENTAGE && request.discountValue > BigDecimal("100")) {
@@ -62,10 +65,36 @@ class OfferService(
             maxUsesPerUser = request.maxUsesPerUser,
             imageUrl = request.imageUrl,
             badgeText = request.badgeText ?: generateBadgeText(request.type, request.discountValue),
-            specialDayId = request.specialDayId
+            specialDayId = request.specialDayId,
+            emailCampaignEnabled = request.emailCampaignEnabled,
+            emailSubject = request.emailSubject,
+            emailMessage = request.emailMessage
         )
 
         val saved = offerRepository.save(offer)
+
+        // If offer is immediately ACTIVE, send push + email now (scheduler only handles SCHEDULED→ACTIVE)
+        if (status == OfferStatus.ACTIVE) {
+            try {
+                pushNotificationService.sendOfferNotification(
+                    title = "Nueva oferta: ${saved.title}",
+                    body = saved.description ?: "Descuento de ${saved.badgeText ?: saved.discountValue}",
+                    offerId = saved.id,
+                    imageUrl = saved.imageUrl
+                )
+            } catch (e: Exception) {
+                logger.warn("Error sending push for offer ${saved.id}: ${e.message}")
+            }
+
+            if (saved.emailCampaignEnabled && seller != null) {
+                try {
+                    offerEmailService.sendOfferEmails(saved, seller)
+                } catch (e: Exception) {
+                    logger.warn("Error sending email campaign for offer ${saved.id}: ${e.message}")
+                }
+            }
+        }
+
         return saved.toResponse()
     }
 
@@ -100,6 +129,9 @@ class OfferService(
         request.imageUrl?.let { offer.imageUrl = it }
         request.badgeText?.let { offer.badgeText = it }
         request.specialDayId?.let { offer.specialDayId = it }
+        request.emailCampaignEnabled?.let { offer.emailCampaignEnabled = it }
+        request.emailSubject?.let { offer.emailSubject = it }
+        request.emailMessage?.let { offer.emailMessage = it }
 
         return offerRepository.save(offer).toResponse()
     }
@@ -127,6 +159,27 @@ class OfferService(
 
     fun getActiveOffers(): List<OfferResponse> {
         return offerRepository.findAllActive(LocalDateTime.now()).map { it.toResponse() }
+    }
+
+    fun browseActiveOffers(page: Int, size: Int, type: OfferType?, category: String?): OfferPageResponse {
+        val pageable = PageRequest.of(page, size)
+        val now = LocalDateTime.now()
+        val result = if (type != null) {
+            offerRepository.findAllActivePagedByType(now, type, pageable)
+        } else {
+            offerRepository.findAllActivePaged(now, pageable)
+        }
+        return OfferPageResponse(
+            offers = result.content.map { it.toResponse() },
+            totalElements = result.totalElements,
+            totalPages = result.totalPages,
+            currentPage = result.number
+        )
+    }
+
+    fun getUpcomingOffers(): List<OfferResponse> {
+        val pageable = PageRequest.of(0, 10)
+        return offerRepository.findUpcoming(LocalDateTime.now(), pageable).content.map { it.toResponse() }
     }
 
     fun getApplicableOffersForProduct(productId: Long): List<ApplicableOfferResponse> {
@@ -240,8 +293,9 @@ class OfferService(
 
     // Special Days
     @Transactional
-    fun createSpecialDay(request: SpecialDayRequest): SpecialDayResponse {
+    fun createSpecialDay(seller: User, request: SpecialDayRequest): SpecialDayResponse {
         val day = SpecialDay(
+            seller = seller,
             name = request.name,
             date = LocalDate.parse(request.date),
             recurring = request.recurring,
@@ -252,9 +306,12 @@ class OfferService(
     }
 
     @Transactional
-    fun updateSpecialDay(id: Long, request: SpecialDayRequest): SpecialDayResponse {
+    fun updateSpecialDay(id: Long, seller: User, request: SpecialDayRequest): SpecialDayResponse {
         val day = specialDayRepository.findById(id)
             .orElseThrow { RuntimeException("Dia especial no encontrado") }
+        if (day.seller?.id != seller.id) {
+            throw RuntimeException("No tienes permiso para editar este dia especial")
+        }
         day.name = request.name
         day.date = LocalDate.parse(request.date)
         day.recurring = request.recurring
@@ -264,12 +321,21 @@ class OfferService(
     }
 
     @Transactional
-    fun deleteSpecialDay(id: Long) {
-        specialDayRepository.deleteById(id)
+    fun deleteSpecialDay(id: Long, seller: User) {
+        val day = specialDayRepository.findById(id)
+            .orElseThrow { RuntimeException("Dia especial no encontrado") }
+        if (day.seller?.id != seller.id) {
+            throw RuntimeException("No tienes permiso para eliminar este dia especial")
+        }
+        specialDayRepository.delete(day)
     }
 
     fun getSpecialDays(): List<SpecialDayResponse> {
         return specialDayRepository.findByActiveTrue().map { it.toResponse() }
+    }
+
+    fun getSpecialDaysForSeller(seller: User): List<SpecialDayResponse> {
+        return specialDayRepository.findBySellerOrderByCreatedAtDesc(seller).map { it.toResponse() }
     }
 
     fun getUpcomingSpecialDays(): List<SpecialDayResponse> {

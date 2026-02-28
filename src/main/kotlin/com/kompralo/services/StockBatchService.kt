@@ -17,6 +17,7 @@ class StockBatchService(
     private val userRepository: UserRepository,
     private val inventoryMovementRepository: InventoryMovementRepository,
     private val notificationService: NotificationService,
+    private val supplierRepository: SupplierRepository,
 ) {
 
     @Transactional
@@ -47,13 +48,24 @@ class StockBatchService(
 
         val batchNumber = generateBatchNumber()
 
+        // Resolve supplier entity if supplierId provided
+        val supplierEntity = request.supplierId?.let { sid ->
+            val s = supplierRepository.findById(sid)
+                .orElseThrow { RuntimeException("Proveedor no encontrado") }
+            if (s.seller.id != sellerId) {
+                throw RuntimeException("No autorizado para usar este proveedor")
+            }
+            s
+        }
+
         val batch = stockBatchRepository.save(
             StockBatch(
                 batchNumber = batchNumber,
                 seller = seller,
                 location = request.location,
                 notes = request.notes,
-                supplier = request.supplier,
+                supplier = supplierEntity?.name ?: request.supplier,
+                supplierEntity = supplierEntity,
                 totalItems = itemsWithProduct.size,
                 totalQuantity = totalQuantity,
                 totalValue = totalValue,
@@ -134,6 +146,7 @@ class StockBatchService(
             location = batch.location,
             notes = batch.notes,
             supplier = batch.supplier,
+            supplierId = batch.supplierEntity?.id,
             status = batch.status,
             totalItems = batch.totalItems,
             totalQuantity = batch.totalQuantity,
@@ -144,6 +157,7 @@ class StockBatchService(
         )
     }
 
+    @Transactional(readOnly = true)
     fun getBatches(sellerId: Long, days: Int?): List<BatchSummaryResponse> {
         val batches = if (days != null && days > 0) {
             val after = LocalDateTime.now().minusDays(days.toLong())
@@ -155,6 +169,7 @@ class StockBatchService(
         return batches.map { it.toSummary() }
     }
 
+    @Transactional(readOnly = true)
     fun getBatchById(sellerId: Long, batchId: Long): BatchResponse {
         val batch = stockBatchRepository.findById(batchId)
             .orElseThrow { RuntimeException("Lote no encontrado") }
@@ -188,6 +203,7 @@ class StockBatchService(
             location = batch.location,
             notes = batch.notes,
             supplier = batch.supplier,
+            supplierId = batch.supplierEntity?.id,
             status = batch.status,
             totalItems = batch.totalItems,
             totalQuantity = batch.totalQuantity,
@@ -208,6 +224,7 @@ class StockBatchService(
         batchNumber = batchNumber,
         location = location,
         supplier = supplier,
+        supplierId = supplierEntity?.id,
         status = status,
         totalItems = totalItems,
         totalQuantity = totalQuantity,

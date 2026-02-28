@@ -8,6 +8,7 @@ data class BatchRestockRequest(
     val location: String? = null,
     val notes: String? = null,
     val supplier: String? = null,
+    val supplierId: Long? = null,
 )
 
 data class BatchItemRequest(
@@ -23,6 +24,7 @@ data class BatchResponse(
     val location: String?,
     val notes: String?,
     val supplier: String?,
+    val supplierId: Long? = null,
     val status: String,
     val totalItems: Int,
     val totalQuantity: Int,
@@ -53,6 +55,7 @@ data class BatchSummaryResponse(
     val batchNumber: String,
     val location: String?,
     val supplier: String?,
+    val supplierId: Long? = null,
     val status: String,
     val totalItems: Int,
     val totalQuantity: Int,
@@ -83,6 +86,7 @@ data class InventoryItemResponse(
     val expiryDate: String?,
     val location: String?,
     val supplier: String?,
+    val supplierId: Long? = null,
     val status: String,
     val createdAt: String,
 )

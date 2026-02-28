@@ -95,6 +95,15 @@ data class Offer(
 
     var specialDayId: Long? = null,
 
+    @Column(nullable = false, columnDefinition = "BOOLEAN NOT NULL DEFAULT false")
+    var emailCampaignEnabled: Boolean = false,
+
+    @Column(length = 100)
+    var emailSubject: String? = null,
+
+    @Column(length = 300)
+    var emailMessage: String? = null,
+
     @Column(nullable = false, updatable = false)
     val createdAt: LocalDateTime = LocalDateTime.now(),
 

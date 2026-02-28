@@ -11,6 +11,10 @@ data class SpecialDay(
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     val id: Long? = null,
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "seller_id")
+    val seller: User? = null,
+
     @Column(nullable = false)
     var name: String,
 

@@ -24,4 +24,7 @@ interface StockRestockRepository : JpaRepository<StockRestock, Long> {
         "ORDER BY sr.createdAt DESC"
     )
     fun searchBySellerAndText(@Param("sellerId") sellerId: Long, @Param("q") q: String): List<StockRestock>
+
+    @Query("SELECT COUNT(DISTINCT sr.product.id) FROM StockRestock sr WHERE sr.batch.id IN :batchIds")
+    fun countDistinctProductsByBatchIds(@Param("batchIds") batchIds: List<Long>): Long
 }

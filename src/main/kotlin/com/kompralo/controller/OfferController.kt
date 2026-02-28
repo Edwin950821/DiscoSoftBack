@@ -1,8 +1,10 @@
 package com.kompralo.controller
 
 import com.kompralo.dto.*
+import com.kompralo.model.OfferType
 import com.kompralo.model.Role
 import com.kompralo.repository.UserRepository
+import com.kompralo.services.OfferEmailService
 import com.kompralo.services.OfferService
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
@@ -12,6 +14,7 @@ import org.springframework.web.bind.annotation.*
 @CrossOrigin(origins = ["http://localhost:5173"], allowCredentials = "true")
 class OfferController(
     private val offerService: OfferService,
+    private val offerEmailService: OfferEmailService,
     private val userRepository: UserRepository
 ) {
 
@@ -73,7 +76,14 @@ class OfferController(
         return ResponseEntity.ok(offerService.getOfferStats(user))
     }
 
-    // ========== Admin endpoints (ADMIN role) ==========
+    @GetMapping("/api/offers/email-history")
+    fun getEmailHistory(auth: Authentication): ResponseEntity<List<EmailCampaignSummary>> {
+        val user = getUser(auth)
+        if (user.role != Role.BUSINESS) {
+            return ResponseEntity.status(403).build()
+        }
+        return ResponseEntity.ok(offerEmailService.getCampaignHistory(user))
+    }
 
     @PostMapping("/api/offers/global")
     fun createGlobalOffer(
@@ -102,15 +112,20 @@ class OfferController(
         auth: Authentication
     ): ResponseEntity<SpecialDayResponse> {
         val user = getUser(auth)
-        if (user.role != Role.ADMIN) {
+        if (user.role != Role.BUSINESS && user.role != Role.ADMIN) {
             return ResponseEntity.status(403).build()
         }
-        return ResponseEntity.ok(offerService.createSpecialDay(request))
+        return ResponseEntity.ok(offerService.createSpecialDay(user, request))
     }
 
     @GetMapping("/api/special-days")
     fun getSpecialDays(auth: Authentication): ResponseEntity<List<SpecialDayResponse>> {
-        return ResponseEntity.ok(offerService.getSpecialDays())
+        val user = getUser(auth)
+        return if (user.role == Role.ADMIN) {
+            ResponseEntity.ok(offerService.getSpecialDays())
+        } else {
+            ResponseEntity.ok(offerService.getSpecialDaysForSeller(user))
+        }
     }
 
     @PutMapping("/api/special-days/{id}")
@@ -120,10 +135,10 @@ class OfferController(
         auth: Authentication
     ): ResponseEntity<SpecialDayResponse> {
         val user = getUser(auth)
-        if (user.role != Role.ADMIN) {
+        if (user.role != Role.BUSINESS && user.role != Role.ADMIN) {
             return ResponseEntity.status(403).build()
         }
-        return ResponseEntity.ok(offerService.updateSpecialDay(id, request))
+        return ResponseEntity.ok(offerService.updateSpecialDay(id, user, request))
     }
 
     @DeleteMapping("/api/special-days/{id}")
@@ -132,18 +147,31 @@ class OfferController(
         auth: Authentication
     ): ResponseEntity<Void> {
         val user = getUser(auth)
-        if (user.role != Role.ADMIN) {
+        if (user.role != Role.BUSINESS && user.role != Role.ADMIN) {
             return ResponseEntity.status(403).build()
         }
-        offerService.deleteSpecialDay(id)
+        offerService.deleteSpecialDay(id, user)
         return ResponseEntity.ok().build()
     }
-
-    // ========== Public endpoints (for buyers) ==========
 
     @GetMapping("/api/public/offers/active")
     fun getActiveOffers(): ResponseEntity<List<OfferResponse>> {
         return ResponseEntity.ok(offerService.getActiveOffers())
+    }
+
+    @GetMapping("/api/public/offers/browse")
+    fun browseOffers(
+        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "12") size: Int,
+        @RequestParam(required = false) type: OfferType?,
+        @RequestParam(required = false) category: String?
+    ): ResponseEntity<OfferPageResponse> {
+        return ResponseEntity.ok(offerService.browseActiveOffers(page, size.coerceAtMost(50), type, category))
+    }
+
+    @GetMapping("/api/public/offers/upcoming")
+    fun getUpcomingOffers(): ResponseEntity<List<OfferResponse>> {
+        return ResponseEntity.ok(offerService.getUpcomingOffers())
     }
 
     @GetMapping("/api/public/offers/product/{productId}")

@@ -36,6 +36,10 @@ data class StockBatch(
     @Column(length = 200)
     var supplier: String? = null,
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "supplier_id")
+    var supplierEntity: Supplier? = null,
+
     @Column(columnDefinition = "VARCHAR(20)")
     var status: String = "ACTIVE",
 

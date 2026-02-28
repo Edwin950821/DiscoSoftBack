@@ -27,7 +27,7 @@ data class SellerProfile(
     val id: Long? = null,
 
     @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", unique = true, nullable = false)
+    @JoinColumn(name = "user_id", unique = true, nullable = false, foreignKey = ForeignKey(name = "fk_seller_profile_user"))
     val user: User,
 
     // Información del negocio

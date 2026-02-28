@@ -11,7 +11,7 @@ data class StoreSettings(
     val id: Long? = null,
 
     @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "seller_id", unique = true, nullable = false)
+    @JoinColumn(name = "seller_id", unique = true, nullable = false, foreignKey = ForeignKey(name = "fk_store_settings_seller"))
     val seller: User,
 
     // General

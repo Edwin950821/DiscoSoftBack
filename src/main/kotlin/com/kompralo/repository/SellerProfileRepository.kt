@@ -19,6 +19,11 @@ interface SellerProfileRepository : JpaRepository<SellerProfile, Long> {
     fun findByUser(user: User): Optional<SellerProfile>
 
     /**
+     * Busca un perfil de vendedor por user ID directamente
+     */
+    fun findByUserId(userId: Long): Optional<SellerProfile>
+
+    /**
      * Verifica si existe un perfil de vendedor para un usuario
      */
     fun existsByUser(user: User): Boolean

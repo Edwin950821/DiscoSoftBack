@@ -10,7 +10,7 @@ import com.kompralo.dto.GoogleRegisterWithTokenRequest
 import com.kompralo.dto.LoginRequest
 import com.kompralo.dto.LoginWith2FARequest
 import com.kompralo.dto.RegisterRequest
-import com.kompralo.dto.UserResponse
+import com.kompralo.dto.SubscriptionResponse
 import com.kompralo.model.Role
 import com.kompralo.model.User
 import com.kompralo.repository.UserRepository
@@ -19,6 +19,7 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
 import java.time.LocalDateTime
+import java.util.UUID
 
 @Service
 class AuthService(
@@ -35,41 +36,57 @@ class AuthService(
     private fun parseRole(accountType: String): Role = when (accountType.lowercase()) {
         "user" -> Role.USER
         "business" -> Role.BUSINESS
-        else -> throw IllegalArgumentException("Tipo de cuenta inválido. Use 'user' o 'business'")
+        "owner" -> Role.OWNER
+        else -> throw IllegalArgumentException("Tipo de cuenta inválido. Use 'user', 'business' o 'owner'")
     }
 
+    /**
+     * VigXa registration: uses username as the primary identifier.
+     * We store username in both `email` (for backward compat with Kompralo lookups)
+     * and `username` field.
+     */
     fun register(request: RegisterRequest): AuthResponse {
-        val role = parseRole(request.accountType)
-
-        val existingUser = userRepository.findByEmail(request.email)
+        // Check if username already exists (stored in email column)
+        val existingUser = userRepository.findByEmail(request.username)
         if (existingUser.isPresent) {
-            val user = existingUser.get()
-            if (!user.isActive) {
-                user.isActive = true
-                user.role = role
-                user.password = passwordEncoder.encode(request.password)
-                val savedUser = userRepository.save(user)
-                val token = jwtService.generateToken(savedUser.email, savedUser.role.name)
-                return AuthResponse(token = token, user = toUserResponse(savedUser))
-            }
-            throw IllegalArgumentException("Este correo ya está registrado")
+            throw IllegalArgumentException("Este username ya está registrado")
         }
 
+        val companyUuid = UUID.randomUUID().toString()
+        val now = LocalDateTime.now()
+
         val user = User(
-            email = request.email,
+            email = request.username, // username is the primary identifier, stored in email for compat
             password = passwordEncoder.encode(request.password),
-            name = request.name,
-            role = role
+            name = "${request.owner_name ?: ""} ${request.owner_lastname ?: ""}".trim().ifEmpty { request.company_name },
+            role = Role.OWNER,
+            uuid = UUID.randomUUID().toString(),
+            code = "USR-${System.currentTimeMillis()}",
+            username = request.username,
+            companyUuid = companyUuid,
+            companyName = request.company_name,
+            companyEmail = request.company_email,
+            companyPhone = request.company_phone,
+            companyNit = request.company_nit,
+            ownerName = request.owner_name,
+            ownerLastname = request.owner_lastname,
+            ownerEmail = request.owner_email,
+            plan = request.plan ?: "FREE_TRIAL",
+            defaultCurrency = "COP",
+            createdAt = now
         )
 
         val savedUser = userRepository.save(user)
         val token = jwtService.generateToken(savedUser.email, savedUser.role.name)
 
-        return AuthResponse(token = token, user = toUserResponse(savedUser))
+        return toVigxaAuthResponse(savedUser, token)
     }
 
+    /**
+     * VigXa login: looks up by username (stored in email column).
+     */
     fun login(request: LoginRequest): AuthResponse {
-        val user = userRepository.findByEmail(request.email)
+        val user = userRepository.findByEmail(request.username)
             .orElseThrow { IllegalArgumentException("Credenciales inválidas") }
 
         if (!passwordEncoder.matches(request.password, user.password)) {
@@ -81,16 +98,14 @@ class AuthService(
         }
 
         if (twoFactorAuthService.isTwoFactorEnabled(user)) {
-            return AuthResponse(
-                token = null,
-                user = toUserResponse(user),
+            return toVigxaAuthResponse(user, null).copy(
                 twoFactorRequired = true,
                 message = "Ingrese su código de autenticación de dos factores"
             )
         }
 
         val token = jwtService.generateToken(user.email, user.role.name)
-        return AuthResponse(token = token, user = toUserResponse(user), twoFactorRequired = false)
+        return toVigxaAuthResponse(user, token)
     }
 
     fun loginWith2FA(request: LoginWith2FARequest): AuthResponse {
@@ -110,7 +125,7 @@ class AuthService(
         }
 
         val token = jwtService.generateToken(user.email, user.role.name)
-        return AuthResponse(token = token, user = toUserResponse(user), twoFactorRequired = false)
+        return toVigxaAuthResponse(user, token)
     }
 
     fun googleRegister(request: GoogleRegisterRequest): AuthResponse {
@@ -136,7 +151,7 @@ class AuthService(
                     user.role = role
                     val reactivated = userRepository.save(user)
                     val token = jwtService.generateToken(reactivated.email, reactivated.role.name)
-                    return AuthResponse(token = token, user = toUserResponse(reactivated))
+                    return toVigxaAuthResponse(reactivated, token)
                 }
                 throw IllegalArgumentException("Este correo ya está registrado")
             }
@@ -151,7 +166,7 @@ class AuthService(
 
             val savedUser = userRepository.save(user)
             val token = jwtService.generateToken(savedUser.email, savedUser.role.name)
-            return AuthResponse(token = token, user = toUserResponse(savedUser))
+            return toVigxaAuthResponse(savedUser, token)
 
         } catch (e: IllegalArgumentException) {
             throw e
@@ -171,11 +186,11 @@ class AuthService(
                 user.role = role
                 userRepository.save(user)
                 val token = jwtService.generateToken(user.email, user.role.name)
-                return AuthResponse(token = token, user = toUserResponse(user))
+                return toVigxaAuthResponse(user, token)
             }
             if (request.isLogin) {
                 val token = jwtService.generateToken(user.email, user.role.name)
-                return AuthResponse(token = token, user = toUserResponse(user))
+                return toVigxaAuthResponse(user, token)
             }
             throw IllegalArgumentException("Este correo ya está registrado")
         }
@@ -197,7 +212,7 @@ class AuthService(
 
         val savedUser = userRepository.save(user)
         val token = jwtService.generateToken(savedUser.email, savedUser.role.name)
-        return AuthResponse(token = token, user = toUserResponse(savedUser))
+        return toVigxaAuthResponse(savedUser, token)
     }
 
     fun googleLogin(credential: String): AuthResponse {
@@ -220,7 +235,7 @@ class AuthService(
             }
 
             val token = jwtService.generateToken(user.email, user.role.name)
-            return AuthResponse(token = token, user = toUserResponse(user))
+            return toVigxaAuthResponse(user, token)
 
         } catch (e: IllegalArgumentException) {
             throw e
@@ -230,10 +245,10 @@ class AuthService(
         }
     }
 
-    fun getUserByEmail(email: String): UserResponse {
+    fun getUserByEmail(email: String): AuthResponse {
         val user = userRepository.findByEmail(email)
             .orElseThrow { IllegalArgumentException("Usuario no encontrado") }
-        return toUserResponse(user)
+        return toVigxaAuthResponse(user, null)
     }
 
     fun extractEmailFromToken(token: String): String {
@@ -248,13 +263,40 @@ class AuthService(
         userRepository.save(user)
     }
 
-    private fun toUserResponse(user: User): UserResponse {
-        return UserResponse(
-            id = user.id ?: 0,
+    /**
+     * Builds a flat AuthResponse matching the VigXa frontend contract.
+     */
+    private fun toVigxaAuthResponse(user: User, token: String?): AuthResponse {
+        val now = LocalDateTime.now()
+        val trialEnd = now.plusDays(15)
+
+        return AuthResponse(
+            token = token,
+            active = user.isActive,
+            code = user.code ?: "",
+            company_uuid = user.companyUuid ?: "",
+            created_at = user.createdAt.toString(),
+            last_modified_at = user.updatedAt.toString(),
+            username = user.username ?: user.email,
+            uuid = user.uuid ?: "",
+            image = user.image,
+            employee_uuid = user.employeeUuid,
+            role = user.role.name,
+            id = user.id,
             email = user.email,
             name = user.name,
-            role = user.role,
-            createdAt = user.createdAt.toString()
+            subscription = SubscriptionResponse(
+                uuid = UUID.randomUUID().toString(),
+                company_uuid = user.companyUuid ?: "",
+                plan = user.plan ?: "FREE_TRIAL",
+                status = "TRIAL",
+                trial_start_date = now.toString(),
+                trial_end_date = trialEnd.toString(),
+                days_remaining = 15,
+                is_active = true
+            ),
+            permissions = listOf("ALL"),
+            default_currency = user.defaultCurrency ?: "COP"
         )
     }
 }

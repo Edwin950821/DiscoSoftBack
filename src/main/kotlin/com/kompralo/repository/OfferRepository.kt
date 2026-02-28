@@ -2,7 +2,10 @@ package com.kompralo.repository
 
 import com.kompralo.model.Offer
 import com.kompralo.model.OfferStatus
+import com.kompralo.model.OfferType
 import com.kompralo.model.User
+import org.springframework.data.domain.Page
+import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
@@ -41,4 +44,23 @@ interface OfferRepository : JpaRepository<Offer, Long> {
 
     @Query("SELECT o FROM Offer o WHERE o.status = 'ACTIVE' AND o.startDate <= :now AND o.endDate > :now ORDER BY o.createdAt DESC")
     fun findAllActive(@Param("now") now: LocalDateTime): List<Offer>
+
+    @Query("SELECT o FROM Offer o WHERE o.status = 'ACTIVE' AND o.startDate <= :now AND o.endDate > :now ORDER BY o.createdAt DESC")
+    fun findAllActivePaged(
+        @Param("now") now: LocalDateTime,
+        pageable: Pageable
+    ): Page<Offer>
+
+    @Query("SELECT o FROM Offer o WHERE o.status = 'ACTIVE' AND o.startDate <= :now AND o.endDate > :now AND o.type = :type ORDER BY o.createdAt DESC")
+    fun findAllActivePagedByType(
+        @Param("now") now: LocalDateTime,
+        @Param("type") type: OfferType,
+        pageable: Pageable
+    ): Page<Offer>
+
+    @Query("SELECT o FROM Offer o WHERE o.status = 'SCHEDULED' AND o.startDate > :now ORDER BY o.startDate ASC")
+    fun findUpcoming(@Param("now") now: LocalDateTime, pageable: Pageable): Page<Offer>
+
+    @Query("SELECT o FROM Offer o WHERE o.seller = :seller AND o.status = 'ACTIVE' AND o.emailCampaignEnabled = true")
+    fun findActiveEmailCampaignsBySeller(@Param("seller") seller: User): List<Offer>
 }

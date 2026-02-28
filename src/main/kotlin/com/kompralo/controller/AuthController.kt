@@ -78,12 +78,12 @@ class AuthController(
             // Guarda el token JWT en cookie HTTP-only
             response.token?.let { servletResponse.addCookie(createAuthCookie(it)) }
 
-            // Retorna respuesta sin token en el body (va en cookie)
-            ResponseEntity.ok(response.copy(token = null))
+            // Retorna respuesta con token en el body
+            ResponseEntity.ok(response)
 
         } catch (e: IllegalArgumentException) {
-            // Captura errores de validación (ej: email duplicado, contraseñas no coinciden)
-            ResponseEntity.status(HttpStatus.BAD_REQUEST)
+            // Captura errores de validación (ej: username duplicado)
+            ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(mapOf("message" to (e.message ?: "Error en el registro")))
 
         } catch (e: Exception) {
@@ -116,8 +116,8 @@ class AuthController(
             // Guarda el token JWT en cookie HTTP-only
             response.token?.let { servletResponse.addCookie(createAuthCookie(it)) }
 
-            // Retorna respuesta sin token en el body
-            ResponseEntity.ok(response.copy(token = null))
+            // Retorna respuesta con token en el body
+            ResponseEntity.ok(response)
 
         } catch (e: IllegalArgumentException) {
             // Captura errores de autenticación (email o contraseña incorrectos)

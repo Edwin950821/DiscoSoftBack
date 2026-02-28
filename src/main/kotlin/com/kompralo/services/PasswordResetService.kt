@@ -71,18 +71,19 @@ class PasswordResetService(
         tokenRepository.save(resetToken)
 
         // Enviar email
+        val userEmail = user.email
         val resetUrl = "$frontendUrl/password-reset"
         val emailSent = emailService.sendPasswordResetEmail(
-            to = user.email,
+            to = userEmail,
             userName = user.name,
             resetToken = token,
             resetUrl = resetUrl
         )
 
         if (emailSent) {
-            logger.info("Email de recuperación enviado a: ${user.email}")
+            logger.info("Email de recuperación enviado a: $userEmail")
         } else {
-            logger.error("Error al enviar email de recuperación a: ${user.email}")
+            logger.error("Error al enviar email de recuperación a: $userEmail")
         }
 
         return emailSent

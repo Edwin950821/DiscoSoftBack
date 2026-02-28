@@ -16,7 +16,8 @@ class OfferScheduler(
     private val offerRepository: OfferRepository,
     private val pushNotificationService: PushNotificationService,
     private val notificationService: NotificationService,
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
+    private val offerEmailService: OfferEmailService
 ) {
     private val logger = LoggerFactory.getLogger(OfferScheduler::class.java)
 
@@ -43,7 +44,6 @@ class OfferScheduler(
                 logger.warn("Error sending push for offer ${offer.id}: ${e.message}")
             }
 
-            // In-app notification to seller if it's a store offer
             if (offer.seller != null) {
                 try {
                     notificationService.createAndSend(
@@ -60,6 +60,14 @@ class OfferScheduler(
                     logger.warn("Error sending activation notification: ${e.message}")
                 }
             }
+
+            if (offer.emailCampaignEnabled && offer.seller != null) {
+                try {
+                    offerEmailService.sendOfferEmails(offer, offer.seller!!)
+                } catch (e: Exception) {
+                    logger.warn("Error sending email campaign for offer ${offer.id}: ${e.message}")
+                }
+            }
         }
     }
 
@@ -74,7 +82,6 @@ class OfferScheduler(
             offerRepository.save(offer)
             logger.info("Offer expired: ${offer.id} - ${offer.title}")
 
-            // Notify seller
             if (offer.seller != null) {
                 try {
                     notificationService.createAndSend(

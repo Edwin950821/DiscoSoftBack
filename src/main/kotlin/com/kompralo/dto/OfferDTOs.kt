@@ -24,7 +24,10 @@ data class CreateOfferRequest(
     val maxUsesPerUser: Int? = null,
     val imageUrl: String? = null,
     val badgeText: String? = null,
-    val specialDayId: Long? = null
+    val specialDayId: Long? = null,
+    val emailCampaignEnabled: Boolean = false,
+    val emailSubject: String? = null,
+    val emailMessage: String? = null
 )
 
 data class UpdateOfferRequest(
@@ -45,7 +48,10 @@ data class UpdateOfferRequest(
     val maxUsesPerUser: Int? = null,
     val imageUrl: String? = null,
     val badgeText: String? = null,
-    val specialDayId: Long? = null
+    val specialDayId: Long? = null,
+    val emailCampaignEnabled: Boolean? = null,
+    val emailSubject: String? = null,
+    val emailMessage: String? = null
 )
 
 data class OfferResponse(
@@ -107,6 +113,21 @@ data class OfferStatsResponse(
     val expiredOffers: Int,
     val totalUses: Long,
     val totalDiscountGiven: BigDecimal
+)
+
+data class OfferPageResponse(
+    val offers: List<OfferResponse>,
+    val totalElements: Long,
+    val totalPages: Int,
+    val currentPage: Int
+)
+
+data class EmailCampaignSummary(
+    val offerId: Long,
+    val offerTitle: String,
+    val emailType: String,
+    val totalSent: Long,
+    val sentAt: LocalDateTime
 )
 
 data class SpecialDayRequest(

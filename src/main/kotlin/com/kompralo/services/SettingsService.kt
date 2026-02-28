@@ -5,6 +5,7 @@ import com.kompralo.model.*
 import com.kompralo.repository.*
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.math.BigDecimal
 
 @Service
 @Transactional
@@ -44,7 +45,7 @@ class SettingsService(
 
     fun getStoreProfile(email: String): StoreProfileResponse {
         val seller = findSeller(email)
-        val profile = sellerProfileRepository.findByUser(seller).orElse(null)
+        val profile = sellerProfileRepository.findByUserId(seller.id!!).orElse(null)
         val settings = getOrCreateSettings(seller)
 
         return StoreProfileResponse(
@@ -67,8 +68,18 @@ class SettingsService(
 
     fun updateStoreProfile(email: String, request: UpdateStoreProfileRequest): StoreProfileResponse {
         val seller = findSeller(email)
-        val profile = sellerProfileRepository.findByUser(seller).orElseGet {
-            sellerProfileRepository.save(SellerProfile(user = seller, businessName = seller.name))
+        // Use findByUserId for a more reliable query (avoids entity comparison issues)
+        val profile = sellerProfileRepository.findByUserId(seller.id!!).orElseGet {
+            // Don't save here — create in memory, apply updates, then save once
+            SellerProfile(
+                user = seller,
+                businessName = seller.name,
+                country = "Colombia",
+                totalProducts = 0,
+                totalReviews = 0,
+                averageRating = BigDecimal.ZERO,
+                totalSales = BigDecimal.ZERO
+            )
         }
 
         request.businessName?.let { profile.businessName = it }
