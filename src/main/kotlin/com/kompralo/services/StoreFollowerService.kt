@@ -41,7 +41,6 @@ class StoreFollowerService(
 
         storeFollowerRepository.save(StoreFollower(buyer = buyer, seller = seller))
 
-        // Send active offer emails to the new follower
         if (!buyer.email.isNullOrBlank()) {
             sendActiveOfferEmailsToNewFollower(buyer, seller)
         }

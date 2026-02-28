@@ -4,7 +4,6 @@ import jakarta.persistence.*
 import java.time.LocalDateTime
 import java.util.UUID
 
-
 @Entity
 @Table(name = "auth_users")
 data class User(
@@ -34,7 +33,6 @@ data class User(
     @Column(nullable = false)
     var updatedAt: LocalDateTime = LocalDateTime.now(),
 
-    // VigXa-specific fields (nullable, added for VigXa registration)
     @Column(unique = true)
     val uuid: String? = UUID.randomUUID().toString(),
 
@@ -86,7 +84,6 @@ data class User(
         updatedAt = LocalDateTime.now()
     }
 }
-
 
 enum class Role {
     USER,

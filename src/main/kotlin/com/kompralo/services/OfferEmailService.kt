@@ -47,7 +47,6 @@ class OfferEmailService(
         for (recipient in recipients) {
             if (recipient.email.isNullOrBlank()) continue
 
-            // Rate limit: max 3 promotional emails per user per 7 days
             val recentCount = emailDeliveryLogRepository.countByUserIdAndSentAtAfter(
                 recipient.id!!, LocalDateTime.now().minusDays(7)
             )
@@ -97,7 +96,6 @@ class OfferEmailService(
         val buyers = orderRepository.findDistinctBuyersBySeller(seller)
         val followers = storeFollowerRepository.findFollowersBySeller(seller)
 
-        // Deduplicate by userId
         val allRecipients = mutableMapOf<Long, User>()
         buyers.forEach { allRecipients[it.id!!] = it }
         followers.forEach { allRecipients[it.id!!] = it }

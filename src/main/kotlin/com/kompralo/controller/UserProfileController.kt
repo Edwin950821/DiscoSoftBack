@@ -9,14 +9,6 @@ import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.*
 
-/**
- * Controlador REST para gestión de perfiles de usuario
- *
- * Endpoints:
- * - GET    /api/user/profile - Obtener mi perfil
- * - PUT    /api/user/profile - Actualizar mi perfil
- * - DELETE /api/user/profile - Limpiar mi perfil
- */
 @RestController
 @RequestMapping("/api/user")
 @CrossOrigin(origins = ["http://localhost:5173"], allowCredentials = "true")
@@ -24,14 +16,6 @@ class UserProfileController(
     private val userProfileService: UserProfileService
 ) {
 
-    /**
-     * Obtiene el perfil del usuario autenticado
-     *
-     * Ruta: GET /api/user/profile
-     *
-     * @param authentication Usuario autenticado
-     * @return Perfil del usuario
-     */
     @GetMapping("/profile")
     fun getMyProfile(authentication: Authentication): ResponseEntity<UserProfileResponse> {
         return try {
@@ -50,15 +34,6 @@ class UserProfileController(
         }
     }
 
-    /**
-     * Actualiza el perfil del usuario autenticado
-     *
-     * Ruta: PUT /api/user/profile
-     *
-     * @param request Datos a actualizar
-     * @param authentication Usuario autenticado
-     * @return Perfil actualizado
-     */
     @PutMapping("/profile")
     fun updateMyProfile(
         @Valid @RequestBody request: UpdateUserProfileRequest,
@@ -80,14 +55,6 @@ class UserProfileController(
         }
     }
 
-    /**
-     * Limpia todos los datos del perfil del usuario autenticado
-     *
-     * Ruta: DELETE /api/user/profile
-     *
-     * @param authentication Usuario autenticado
-     * @return Perfil limpio
-     */
     @DeleteMapping("/profile")
     fun clearMyProfile(authentication: Authentication): ResponseEntity<*> {
         return try {

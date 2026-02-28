@@ -32,7 +32,6 @@ class OfferScheduler(
             offerRepository.save(offer)
             logger.info("Offer activated: ${offer.id} - ${offer.title}")
 
-            // Push notification to all buyers
             try {
                 pushNotificationService.sendOfferNotification(
                     title = "Nueva oferta: ${offer.title}",

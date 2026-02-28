@@ -73,7 +73,6 @@ class OfferService(
 
         val saved = offerRepository.save(offer)
 
-        // If offer is immediately ACTIVE, send push + email now (scheduler only handles SCHEDULED→ACTIVE)
         if (status == OfferStatus.ACTIVE) {
             try {
                 pushNotificationService.sendOfferNotification(
@@ -291,7 +290,6 @@ class OfferService(
         return offer.toResponse()
     }
 
-    // Special Days
     @Transactional
     fun createSpecialDay(seller: User, request: SpecialDayRequest): SpecialDayResponse {
         val day = SpecialDay(
@@ -345,7 +343,6 @@ class OfferService(
             .map { it.toResponse() }
     }
 
-    // Mapping helpers
     private fun generateBadgeText(type: OfferType, value: BigDecimal): String {
         return when (type) {
             OfferType.PERCENTAGE -> "-${value.stripTrailingZeros().toPlainString()}%"

@@ -25,10 +25,8 @@ class SocketIOConfig {
             hostname = host
             port = this@SocketIOConfig.port
 
-            // CORS para frontend
             origin = "http://localhost:5173,http://localhost:5174,http://localhost:3000"
 
-            // Configuración de transporte
             isAllowCustomRequests = true
             upgradeTimeout = 10000
             pingTimeout = 60000

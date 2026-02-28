@@ -4,21 +4,13 @@ import jakarta.persistence.*
 import java.math.BigDecimal
 import java.time.LocalDateTime
 
-/**
- * Estado del vendedor en la plataforma
- */
 enum class SellerStatus {
-    PENDING,    // Pendiente de verificación
-    ACTIVE,     // Activo y vendiendo
-    SUSPENDED,  // Suspendido temporalmente
-    BANNED      // Baneado permanentemente
+    PENDING,
+    ACTIVE,
+    SUSPENDED,
+    BANNED
 }
 
-/**
- * Entidad para perfil de vendedor (usuarios BUSINESS)
- *
- * Almacena información del negocio, métricas de ventas, y estado de verificación
- */
 @Entity
 @Table(name = "seller_profiles")
 data class SellerProfile(
@@ -30,12 +22,11 @@ data class SellerProfile(
     @JoinColumn(name = "user_id", unique = true, nullable = false, foreignKey = ForeignKey(name = "fk_seller_profile_user"))
     val user: User,
 
-    // Información del negocio
     @Column(nullable = false)
     var businessName: String,
 
     @Column(length = 100)
-    var businessType: String? = null, // 'tienda', 'marca', 'distribuidor'
+    var businessType: String? = null,
 
     @Column(columnDefinition = "TEXT")
     var description: String? = null,
@@ -50,9 +41,8 @@ data class SellerProfile(
     var website: String? = null,
 
     @Column(length = 50)
-    var taxId: String? = null, // NIT o RUT
+    var taxId: String? = null,
 
-    // Dirección del negocio
     @Column(columnDefinition = "TEXT")
     var address: String? = null,
 
@@ -68,7 +58,6 @@ data class SellerProfile(
     @Column(length = 100)
     var country: String = "Colombia",
 
-    // Estado y verificación
     @Column(nullable = false)
     var verified: Boolean = false,
 
@@ -78,7 +67,6 @@ data class SellerProfile(
     @Column(nullable = false, length = 50)
     var status: SellerStatus = SellerStatus.PENDING,
 
-    // Métricas (calculadas automáticamente)
     @Column(precision = 15, scale = 2)
     var totalSales: BigDecimal = BigDecimal.ZERO,
 
@@ -91,24 +79,17 @@ data class SellerProfile(
     @Column(nullable = false)
     var totalReviews: Int = 0,
 
-    // Timestamps
     @Column(nullable = false, updatable = false)
     val createdAt: LocalDateTime = LocalDateTime.now(),
 
     @Column(nullable = false)
     var updatedAt: LocalDateTime = LocalDateTime.now()
 ) {
-    /**
-     * Hook que se ejecuta antes de actualizar la entidad
-     */
     @PreUpdate
     fun onPreUpdate() {
         updatedAt = LocalDateTime.now()
     }
 
-    /**
-     * Marca el vendedor como verificado
-     */
     fun verify() {
         verified = true
         verificationDate = LocalDateTime.now()
@@ -117,9 +98,6 @@ data class SellerProfile(
         }
     }
 
-    /**
-     * Verifica si el vendedor puede vender
-     */
     fun canSell(): Boolean {
         return verified && status == SellerStatus.ACTIVE
     }

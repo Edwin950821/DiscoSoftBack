@@ -48,7 +48,6 @@ class StockBatchService(
 
         val batchNumber = generateBatchNumber()
 
-        // Resolve supplier entity if supplierId provided
         val supplierEntity = request.supplierId?.let { sid ->
             val s = supplierRepository.findById(sid)
                 .orElseThrow { RuntimeException("Proveedor no encontrado") }
@@ -93,7 +92,6 @@ class StockBatchService(
                 )
             )
 
-            // Record ENTRY movement
             inventoryMovementRepository.save(
                 InventoryMovement(
                     product = product,

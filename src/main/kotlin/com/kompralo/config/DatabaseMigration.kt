@@ -15,7 +15,6 @@ class DatabaseMigration(
     @EventListener(ApplicationReadyEvent::class)
     fun fixOrdersForeignKeys() {
         try {
-            // Find FK constraints on orders that reference 'users' instead of 'auth_users'
             val badFks = jdbcTemplate.queryForList(
                 """
                 SELECT tc.constraint_name
@@ -39,7 +38,6 @@ class DatabaseMigration(
                 log.info("Dropped bad FK: $constraintName")
             }
 
-            // Recreate correct FKs
             jdbcTemplate.execute("ALTER TABLE orders ADD CONSTRAINT fk_orders_buyer FOREIGN KEY (buyer_id) REFERENCES auth_users(id)")
             jdbcTemplate.execute("ALTER TABLE orders ADD CONSTRAINT fk_orders_seller FOREIGN KEY (seller_id) REFERENCES auth_users(id)")
             log.info("Recreated FKs pointing to auth_users")

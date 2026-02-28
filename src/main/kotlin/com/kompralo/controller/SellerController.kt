@@ -15,18 +15,6 @@ import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.*
 
-/**
- * Controlador REST para vendedores
- *
- * Endpoints públicos:
- * - POST /api/sellers/register - Registrar nuevo vendedor
- * - GET  /api/sellers - Listar vendedores verificados
- * - GET  /api/sellers/{id} - Ver perfil público de vendedor
- *
- * Endpoints privados (requieren autenticación):
- * - GET  /api/sellers/profile - Mi perfil de vendedor
- * - PUT  /api/sellers/profile - Actualizar mi perfil de vendedor
- */
 @RestController
 @RequestMapping("/api/sellers")
 @CrossOrigin(origins = ["http://localhost:5173"], allowCredentials = "true")
@@ -35,9 +23,6 @@ class SellerController(
     private val salesDashboardService: SalesDashboardService
 ) {
 
-    /**
-     * Crea una cookie HTTP-only con el token JWT
-     */
     private fun createAuthCookie(token: String): Cookie {
         return Cookie("authToken", token).apply {
             isHttpOnly = true
@@ -47,15 +32,6 @@ class SellerController(
         }
     }
 
-    /**
-     * Registra un nuevo vendedor
-     *
-     * Ruta: POST /api/sellers/register
-     *
-     * @param request Datos de registro del vendedor
-     * @param servletResponse Response HTTP para agregar la cookie
-     * @return AuthResponse con token en cookie
-     */
     @PostMapping("/register")
     fun registerSeller(
         @Valid @RequestBody request: SellerRegisterRequest,
@@ -64,13 +40,11 @@ class SellerController(
         return try {
             val response = sellerProfileService.registerSeller(request)
 
-            // Extraer token y guardarlo en cookie
             val token = (response as? Map<*, *>)?.get("token") as? String
             if (token != null) {
                 servletResponse.addCookie(createAuthCookie(token))
             }
 
-            // Remover token del response body
             val responseWithoutToken = (response as? Map<*, *>)?.toMutableMap()?.apply {
                 remove("token")
             } ?: response
@@ -87,14 +61,6 @@ class SellerController(
         }
     }
 
-    /**
-     * Obtiene el perfil del vendedor autenticado
-     *
-     * Ruta: GET /api/sellers/profile
-     *
-     * @param authentication Usuario autenticado
-     * @return Perfil completo del vendedor (datos privados)
-     */
     @GetMapping("/profile")
     fun getMySellerProfile(authentication: Authentication): ResponseEntity<*> {
         return try {
@@ -113,15 +79,6 @@ class SellerController(
         }
     }
 
-    /**
-     * Actualiza el perfil del vendedor autenticado
-     *
-     * Ruta: PUT /api/sellers/profile
-     *
-     * @param request Datos a actualizar
-     * @param authentication Usuario autenticado
-     * @return Perfil actualizado
-     */
     @PutMapping("/profile")
     fun updateMySellerProfile(
         @Valid @RequestBody request: UpdateSellerProfileRequest,
@@ -143,13 +100,6 @@ class SellerController(
         }
     }
 
-    /**
-     * Lista todos los vendedores verificados y activos (público)
-     *
-     * Ruta: GET /api/sellers
-     *
-     * @return Lista de perfiles públicos de vendedores
-     */
     @GetMapping
     fun listVerifiedSellers(): ResponseEntity<List<PublicSellerProfileResponse>> {
         return try {
@@ -163,14 +113,6 @@ class SellerController(
         }
     }
 
-    /**
-     * Obtiene el perfil público de un vendedor por ID
-     *
-     * Ruta: GET /api/sellers/{id}
-     *
-     * @param id ID del vendedor
-     * @return Perfil público del vendedor (sin datos sensibles)
-     */
     @GetMapping("/{id}")
     fun getPublicSellerProfile(@PathVariable id: Long): ResponseEntity<*> {
         return try {
@@ -188,23 +130,6 @@ class SellerController(
         }
     }
 
-    /**
-     * Obtiene el dashboard de ventas del vendedor autenticado
-     *
-     * Ruta: GET /api/sellers/sales/dashboard
-     *
-     * Calcula:
-     * - Ventas de hoy (count y sum)
-     * - Ventas de la semana (count y sum)
-     * - Ventas del mes (count y sum)
-     * - Ticket promedio del mes
-     * - Porcentaje de cambio vs período anterior
-     * - Conteo de órdenes por estado (pendientes, procesando, en tránsito, entregadas)
-     * - Totales históricos
-     *
-     * @param authentication Usuario autenticado
-     * @return Dashboard con métricas de ventas
-     */
     @GetMapping("/sales/dashboard")
     fun getSalesDashboard(authentication: Authentication): ResponseEntity<*> {
         return try {

@@ -9,19 +9,12 @@ import com.kompralo.repository.UserRepository
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
-/**
- * Servicio para gestión de perfiles de usuario (compradores)
- */
 @Service
 class UserProfileService(
     private val userProfileRepository: UserProfileRepository,
     private val userRepository: UserRepository
 ) {
 
-    /**
-     * Obtiene el perfil de un usuario por email
-     * Si no existe, crea uno nuevo con valores por defecto
-     */
     @Transactional
     fun getUserProfile(email: String): UserProfileResponse {
         val user = userRepository.findByEmail(email)
@@ -29,7 +22,6 @@ class UserProfileService(
 
         val profile = userProfileRepository.findByUser(user)
             .orElseGet {
-                // Crear perfil automáticamente si no existe
                 val newProfile = UserProfile(user = user)
                 userProfileRepository.save(newProfile)
             }
@@ -37,9 +29,6 @@ class UserProfileService(
         return toUserProfileResponse(profile)
     }
 
-    /**
-     * Actualiza el perfil de un usuario
-     */
     @Transactional
     fun updateUserProfile(email: String, request: UpdateUserProfileRequest): UserProfileResponse {
         val user = userRepository.findByEmail(email)
@@ -47,11 +36,9 @@ class UserProfileService(
 
         val profile = userProfileRepository.findByUser(user)
             .orElseGet {
-                // Crear perfil si no existe
                 UserProfile(user = user)
             }
 
-        // Actualizar campos (solo si se proporcionan)
         request.phone?.let { profile.phone = it }
         request.avatarUrl?.let { profile.avatarUrl = it }
         request.address?.let { profile.address = it }
@@ -65,9 +52,6 @@ class UserProfileService(
         return toUserProfileResponse(savedProfile)
     }
 
-    /**
-     * Elimina el perfil de un usuario (soft delete conceptual, limpia datos)
-     */
     @Transactional
     fun clearUserProfile(email: String): UserProfileResponse {
         val user = userRepository.findByEmail(email)
@@ -76,7 +60,6 @@ class UserProfileService(
         val profile = userProfileRepository.findByUser(user)
             .orElseThrow { IllegalArgumentException("Perfil no encontrado") }
 
-        // Limpiar todos los datos del perfil
         profile.phone = null
         profile.avatarUrl = null
         profile.address = null
@@ -90,9 +73,6 @@ class UserProfileService(
         return toUserProfileResponse(savedProfile)
     }
 
-    /**
-     * Convierte UserProfile a UserProfileResponse
-     */
     private fun toUserProfileResponse(profile: UserProfile): UserProfileResponse {
         return UserProfileResponse(
             id = profile.id ?: 0,

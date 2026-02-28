@@ -64,8 +64,6 @@ data class BatchSummaryResponse(
     val createdAt: LocalDateTime,
 )
 
-// ==================== Inventory Items (flat list of restocks) ====================
-
 data class InventoryItemResponse(
     val id: Long,
     val batchNumber: String,
@@ -91,8 +89,6 @@ data class InventoryItemResponse(
     val createdAt: String,
 )
 
-// ==================== Inventory Movements ====================
-
 data class InventoryMovementResponse(
     val id: Long,
     val productId: Long,
@@ -108,8 +104,6 @@ data class InventoryMovementResponse(
     val notes: String?,
     val createdAt: String,
 )
-
-// ==================== Stock Adjustment ====================
 
 data class AdjustStockRequest(
     val restockId: Long,

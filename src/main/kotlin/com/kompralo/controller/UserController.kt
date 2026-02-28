@@ -13,9 +13,6 @@ import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
 
-/**
- * Controlador REST para gestión de usuarios (CRUD)
- */
 @RestController
 @RequestMapping("/api/users")
 @CrossOrigin(origins = ["http://localhost:5173"], allowCredentials = "true")
@@ -23,15 +20,6 @@ class UserController(
     private val userService: UserService
 ) {
 
-    /**
-     * GET /api/users
-     * Lista todos los usuarios con paginación
-     *
-     * @param page Número de página (default: 0)
-     * @param size Tamaño de página (default: 10)
-     * @param sortBy Campo para ordenar (default: createdAt)
-     * @param sortDir Dirección del orden: asc o desc (default: desc)
-     */
     @GetMapping
     fun getAllUsers(
         @RequestParam(defaultValue = "0") page: Int,
@@ -43,10 +31,6 @@ class UserController(
         return ResponseEntity.ok(users)
     }
 
-    /**
-     * GET /api/users/{id}
-     * Obtiene un usuario por ID
-     */
     @GetMapping("/{id}")
     fun getUserById(@PathVariable id: Long): ResponseEntity<*> {
         return try {
@@ -58,10 +42,6 @@ class UserController(
         }
     }
 
-    /**
-     * GET /api/users/email/{email}
-     * Obtiene un usuario por email
-     */
     @GetMapping("/email/{email}")
     fun getUserByEmail(@PathVariable email: String): ResponseEntity<*> {
         return try {
@@ -73,10 +53,6 @@ class UserController(
         }
     }
 
-    /**
-     * POST /api/users
-     * Crea un nuevo usuario
-     */
     @PostMapping
     fun createUser(@Valid @RequestBody request: CreateUserRequest): ResponseEntity<*> {
         return try {
@@ -91,10 +67,6 @@ class UserController(
         }
     }
 
-    /**
-     * PUT /api/users/{id}
-     * Actualiza un usuario existente
-     */
     @PutMapping("/{id}")
     fun updateUser(
         @PathVariable id: Long,
@@ -115,10 +87,6 @@ class UserController(
         }
     }
 
-    /**
-     * DELETE /api/users/{id}
-     * Elimina un usuario
-     */
     @DeleteMapping("/{id}")
     fun deleteUser(@PathVariable id: Long): ResponseEntity<*> {
         return try {
@@ -130,20 +98,12 @@ class UserController(
         }
     }
 
-    /**
-     * GET /api/users/count
-     * Obtiene el total de usuarios
-     */
     @GetMapping("/count")
     fun countUsers(): ResponseEntity<Map<String, Long>> {
         val count = userService.countUsers()
         return ResponseEntity.ok(mapOf("total" to count))
     }
 
-    /**
-     * GET /api/users/role/{role}
-     * Obtiene usuarios por rol (USER, BUSINESS, ADMIN)
-     */
     @GetMapping("/role/{role}")
     fun getUsersByRole(@PathVariable role: String): ResponseEntity<*> {
         return try {
@@ -156,10 +116,6 @@ class UserController(
         }
     }
 
-    /**
-     * GET /api/users/admins-businesses
-     * Obtiene todos los administradores y negocios
-     */
     @GetMapping("/admins-businesses")
     fun getAdminsAndBusinesses(): ResponseEntity<List<UserDTO>> {
         val users = userService.getAdminsAndBusinesses()

@@ -15,9 +15,6 @@ import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.security.web.SecurityFilterChain
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter
 
-/**
- * Configuración de seguridad de Spring Security
- */
 @Configuration
 @EnableWebSecurity
 class SecurityConfig(
@@ -25,9 +22,6 @@ class SecurityConfig(
     private val userDetailsService: CustomUserDetailsService
 ) {
 
-    /**
-     * Configura la cadena de filtros de seguridad
-     */
     @Bean
     fun securityFilterChain(http: HttpSecurity): SecurityFilterChain {
         http
@@ -64,9 +58,6 @@ class SecurityConfig(
         return http.build()
     }
 
-    /**
-     * Proveedor de autenticación con UserDetailsService
-     */
     @Bean
     fun authenticationProvider(): AuthenticationProvider {
         val provider = DaoAuthenticationProvider()
@@ -75,17 +66,11 @@ class SecurityConfig(
         return provider
     }
 
-    /**
-     * Authentication Manager de Spring Security
-     */
     @Bean
     fun authenticationManager(config: AuthenticationConfiguration): AuthenticationManager {
         return config.authenticationManager
     }
 
-    /**
-     * Encoder de passwords con BCrypt
-     */
     @Bean
     fun passwordEncoder(): PasswordEncoder {
         return BCryptPasswordEncoder()

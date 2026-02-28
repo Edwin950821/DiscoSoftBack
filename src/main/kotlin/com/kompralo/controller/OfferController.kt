@@ -18,8 +18,6 @@ class OfferController(
     private val userRepository: UserRepository
 ) {
 
-    // ========== Store endpoints (BUSINESS role) ==========
-
     @PostMapping("/api/offers")
     fun createOffer(
         @RequestBody request: CreateOfferRequest,

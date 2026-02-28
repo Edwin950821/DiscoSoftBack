@@ -42,7 +42,6 @@ class SettingsService(
         }
     }
 
-
     fun getStoreProfile(email: String): StoreProfileResponse {
         val seller = findSeller(email)
         val profile = sellerProfileRepository.findByUserId(seller.id!!).orElse(null)
@@ -68,9 +67,7 @@ class SettingsService(
 
     fun updateStoreProfile(email: String, request: UpdateStoreProfileRequest): StoreProfileResponse {
         val seller = findSeller(email)
-        // Use findByUserId for a more reliable query (avoids entity comparison issues)
         val profile = sellerProfileRepository.findByUserId(seller.id!!).orElseGet {
-            // Don't save here — create in memory, apply updates, then save once
             SellerProfile(
                 user = seller,
                 businessName = seller.name,
@@ -110,7 +107,6 @@ class SettingsService(
         return getStoreProfile(email)
     }
 
-
     fun getPaymentMethods(email: String): PaymentSettingsResponse {
         val seller = findSeller(email)
         val settings = getOrCreateSettings(seller)
@@ -142,7 +138,6 @@ class SettingsService(
         storeSettingsRepository.save(settings)
         return getPaymentMethods(email)
     }
-
 
     @Transactional(readOnly = true)
     fun getShippingZones(email: String): List<ShippingZoneResponse> {
@@ -246,7 +241,6 @@ class SettingsService(
         storeSettingsRepository.save(settings)
         return getTaxSettings(email)
     }
-
 
     fun getNotificationPreferences(email: String): NotificationPreferencesResponse {
         val seller = findSeller(email)

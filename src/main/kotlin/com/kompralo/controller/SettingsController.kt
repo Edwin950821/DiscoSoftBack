@@ -53,6 +53,7 @@ class SettingsController(
                 .body(mapOf("message" to (e.message ?: "Error al actualizar configuracion")))
         }
     }
+
     @GetMapping("/payments")
     fun getPaymentMethods(authentication: Authentication): ResponseEntity<*> {
         return try {
@@ -238,8 +239,6 @@ class SettingsController(
                 .body(mapOf("message" to (e.message ?: "Error al actualizar apariencia")))
         }
     }
-
-    // ==================== POLICIES ====================
 
     @GetMapping("/policies")
     fun getPolicies(authentication: Authentication): ResponseEntity<*> {

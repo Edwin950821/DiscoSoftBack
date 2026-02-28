@@ -14,28 +14,24 @@ data class StoreSettings(
     @JoinColumn(name = "seller_id", unique = true, nullable = false, foreignKey = ForeignKey(name = "fk_store_settings_seller"))
     val seller: User,
 
-    // General
     @Column(length = 10, nullable = false)
     var currency: String = "COP",
 
     @Column(nullable = false)
     var maintenanceMode: Boolean = false,
 
-    // Payment methods (comma-separated enabled methods)
     @Column(columnDefinition = "TEXT", nullable = false)
     var enabledPaymentMethods: String = "CASH_ON_DELIVERY,TRANSFER",
 
     @Column(length = 50, nullable = false)
     var defaultPaymentMethod: String = "CASH_ON_DELIVERY",
 
-    // Tax global settings
     @Column(nullable = false)
     var taxIncludedInPrice: Boolean = false,
 
     @Column(nullable = false)
     var autoTaxUpdate: Boolean = false,
 
-    // Notification preferences
     @Column(nullable = false)
     var notifyNewOrder: Boolean = true,
 
@@ -54,7 +50,6 @@ data class StoreSettings(
     @Column(nullable = false)
     var pushNotifications: Boolean = true,
 
-    // Appearance
     @Column(length = 20, nullable = false)
     var primaryColor: String = "#059669",
 

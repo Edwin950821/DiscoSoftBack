@@ -40,13 +40,7 @@ class AuthService(
         else -> throw IllegalArgumentException("Tipo de cuenta inválido. Use 'user', 'business' o 'owner'")
     }
 
-    /**
-     * VigXa registration: uses username as the primary identifier.
-     * We store username in both `email` (for backward compat with Kompralo lookups)
-     * and `username` field.
-     */
     fun register(request: RegisterRequest): AuthResponse {
-        // Check if username already exists (stored in email column)
         val existingUser = userRepository.findByEmail(request.username)
         if (existingUser.isPresent) {
             throw IllegalArgumentException("Este username ya está registrado")
@@ -56,7 +50,7 @@ class AuthService(
         val now = LocalDateTime.now()
 
         val user = User(
-            email = request.username, // username is the primary identifier, stored in email for compat
+            email = request.username,
             password = passwordEncoder.encode(request.password),
             name = "${request.owner_name ?: ""} ${request.owner_lastname ?: ""}".trim().ifEmpty { request.company_name },
             role = Role.OWNER,
@@ -82,9 +76,6 @@ class AuthService(
         return toVigxaAuthResponse(savedUser, token)
     }
 
-    /**
-     * VigXa login: looks up by username (stored in email column).
-     */
     fun login(request: LoginRequest): AuthResponse {
         val user = userRepository.findByEmail(request.username)
             .orElseThrow { IllegalArgumentException("Credenciales inválidas") }
@@ -263,9 +254,6 @@ class AuthService(
         userRepository.save(user)
     }
 
-    /**
-     * Builds a flat AuthResponse matching the VigXa frontend contract.
-     */
     private fun toVigxaAuthResponse(user: User, token: String?): AuthResponse {
         val now = LocalDateTime.now()
         val trialEnd = now.plusDays(15)

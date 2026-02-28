@@ -11,9 +11,6 @@ import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
-/**
- * Servicio para gestión de perfiles de vendedor
- */
 @Service
 class SellerProfileService(
     private val sellerProfileRepository: SellerProfileRepository,
@@ -22,18 +19,12 @@ class SellerProfileService(
     private val jwtService: JwtService
 ) {
 
-    /**
-     * Registra un nuevo vendedor (usuario + perfil de vendedor)
-     * Similar a AuthService.register pero específico para vendedores
-     */
     @Transactional
     fun registerSeller(request: SellerRegisterRequest): AuthResponse {
-        // Validar que el email no exista
         if (userRepository.existsByEmail(request.email)) {
             throw IllegalArgumentException("El email ya está registrado")
         }
 
-        // Crear usuario con rol BUSINESS
         val user = User(
             email = request.email,
             password = passwordEncoder.encode(request.password),
@@ -43,7 +34,6 @@ class SellerProfileService(
 
         val savedUser = userRepository.save(user)
 
-        // Crear perfil de vendedor
         val sellerProfile = SellerProfile(
             user = savedUser,
             businessName = request.businessName,
@@ -57,12 +47,11 @@ class SellerProfileService(
             state = request.state,
             postalCode = request.postalCode,
             country = request.country,
-            status = SellerStatus.PENDING // Requiere verificación
+            status = SellerStatus.PENDING
         )
 
         sellerProfileRepository.save(sellerProfile)
 
-        // Generar token JWT con rol
         val token = jwtService.generateToken(savedUser.email, savedUser.role.name)
 
         return AuthResponse(
@@ -79,15 +68,11 @@ class SellerProfileService(
         )
     }
 
-    /**
-     * Obtiene el perfil de vendedor del usuario autenticado
-     */
     @Transactional(readOnly = true)
     fun getSellerProfile(email: String): SellerProfileResponse {
         val user = userRepository.findByEmail(email)
             .orElseThrow { IllegalArgumentException("Usuario no encontrado") }
 
-        // Verificar que sea vendedor
         if (user.role != Role.BUSINESS) {
             throw IllegalArgumentException("El usuario no es un vendedor")
         }
@@ -98,9 +83,6 @@ class SellerProfileService(
         return toSellerProfileResponse(sellerProfile)
     }
 
-    /**
-     * Obtiene el perfil público de un vendedor por ID (para compradores)
-     */
     @Transactional(readOnly = true)
     fun getPublicSellerProfile(sellerId: Long): PublicSellerProfileResponse {
         val sellerProfile = sellerProfileRepository.findById(sellerId)
@@ -109,9 +91,6 @@ class SellerProfileService(
         return toPublicSellerProfileResponse(sellerProfile)
     }
 
-    /**
-     * Actualiza el perfil de vendedor
-     */
     @Transactional
     fun updateSellerProfile(email: String, request: UpdateSellerProfileRequest): SellerProfileResponse {
         val user = userRepository.findByEmail(email)
@@ -124,7 +103,6 @@ class SellerProfileService(
         val sellerProfile = sellerProfileRepository.findByUser(user)
             .orElseThrow { IllegalArgumentException("Perfil de vendedor no encontrado") }
 
-        // Actualizar campos (solo si se proporcionan)
         request.businessName?.let { sellerProfile.businessName = it }
         request.businessType?.let { sellerProfile.businessType = it }
         request.description?.let { sellerProfile.description = it }
@@ -143,18 +121,12 @@ class SellerProfileService(
         return toSellerProfileResponse(savedProfile)
     }
 
-    /**
-     * Lista todos los vendedores verificados (público)
-     */
     @Transactional(readOnly = true)
     fun listVerifiedSellers(): List<PublicSellerProfileResponse> {
         val sellers = sellerProfileRepository.findByVerifiedTrueAndStatus(SellerStatus.ACTIVE)
         return sellers.map { toPublicSellerProfileResponse(it) }
     }
 
-    /**
-     * Convierte SellerProfile a SellerProfileResponse (privado - para el vendedor)
-     */
     private fun toSellerProfileResponse(profile: SellerProfile): SellerProfileResponse {
         return SellerProfileResponse(
             id = profile.id ?: 0,
@@ -183,9 +155,6 @@ class SellerProfileService(
         )
     }
 
-    /**
-     * Convierte SellerProfile a PublicSellerProfileResponse (público - sin datos sensibles)
-     */
     private fun toPublicSellerProfileResponse(profile: SellerProfile): PublicSellerProfileResponse {
         return PublicSellerProfileResponse(
             id = profile.id ?: 0,
