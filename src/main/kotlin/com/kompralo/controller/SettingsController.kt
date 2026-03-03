@@ -10,7 +10,6 @@ import org.springframework.web.bind.annotation.*
 
 @RestController
 @RequestMapping("/api/settings")
-@CrossOrigin(origins = ["http://localhost:5173"], allowCredentials = "true")
 class SettingsController(
     private val settingsService: SettingsService
 ) {

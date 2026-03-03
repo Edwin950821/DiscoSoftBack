@@ -21,7 +21,7 @@ class OfferScheduler(
 ) {
     private val logger = LoggerFactory.getLogger(OfferScheduler::class.java)
 
-    @Scheduled(fixedRate = 60000)
+    @Scheduled(fixedDelay = 300000, initialDelay = 10000)
     @Transactional
     fun activateScheduledOffers() {
         val now = LocalDateTime.now()
@@ -70,7 +70,7 @@ class OfferScheduler(
         }
     }
 
-    @Scheduled(fixedRate = 60000)
+    @Scheduled(fixedDelay = 300000, initialDelay = 15000)
     @Transactional
     fun expireActiveOffers() {
         val now = LocalDateTime.now()

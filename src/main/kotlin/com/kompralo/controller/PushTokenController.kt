@@ -10,7 +10,6 @@ import org.springframework.web.bind.annotation.*
 
 @RestController
 @RequestMapping("/api/push")
-@CrossOrigin(origins = ["http://localhost:5173"], allowCredentials = "true")
 class PushTokenController(
     private val pushNotificationService: PushNotificationService,
     private val userRepository: UserRepository

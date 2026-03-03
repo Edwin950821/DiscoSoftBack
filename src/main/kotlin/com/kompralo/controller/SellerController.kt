@@ -17,32 +17,39 @@ import org.springframework.web.bind.annotation.*
 
 @RestController
 @RequestMapping("/api/sellers")
-@CrossOrigin(origins = ["http://localhost:5173"], allowCredentials = "true")
 class SellerController(
     private val sellerProfileService: SellerProfileService,
     private val salesDashboardService: SalesDashboardService
 ) {
 
-    private fun createAuthCookie(token: String): Cookie {
+    private fun createAuthCookie(token: String, isSecure: Boolean = false): Cookie {
         return Cookie("authToken", token).apply {
             isHttpOnly = true
-            secure = false
+            secure = isSecure
             path = "/"
-            maxAge = -1
+            maxAge = 86400
+            setAttribute("SameSite", if (isSecure) "None" else "Lax")
         }
+    }
+
+    private fun isSecureRequest(request: jakarta.servlet.http.HttpServletRequest): Boolean {
+        return request.isSecure ||
+            request.getHeader("X-Forwarded-Proto") == "https" ||
+            request.getHeader("Origin")?.startsWith("https://") == true
     }
 
     @PostMapping("/register")
     fun registerSeller(
         @Valid @RequestBody request: SellerRegisterRequest,
+        servletRequest: jakarta.servlet.http.HttpServletRequest,
         servletResponse: HttpServletResponse
     ): ResponseEntity<*> {
         return try {
             val response = sellerProfileService.registerSeller(request)
-
+            val secure = isSecureRequest(servletRequest)
             val token = (response as? Map<*, *>)?.get("token") as? String
             if (token != null) {
-                servletResponse.addCookie(createAuthCookie(token))
+                servletResponse.addCookie(createAuthCookie(token, secure))
             }
 
             val responseWithoutToken = (response as? Map<*, *>)?.toMutableMap()?.apply {

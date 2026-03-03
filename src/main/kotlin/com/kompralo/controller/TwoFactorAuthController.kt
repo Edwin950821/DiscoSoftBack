@@ -22,7 +22,6 @@ import org.springframework.web.bind.annotation.*
  */
 @RestController
 @RequestMapping("/api/auth/2fa")
-@CrossOrigin(origins = ["http://localhost:5173"], allowCredentials = "true")
 class TwoFactorAuthController(
     private val twoFactorAuthService: TwoFactorAuthService,
     private val userRepository: UserRepository

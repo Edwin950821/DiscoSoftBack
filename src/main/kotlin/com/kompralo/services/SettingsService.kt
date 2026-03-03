@@ -26,7 +26,7 @@ class SettingsService(
             "TRANSFER" to "Transferencia bancaria",
             "PSE" to "PSE",
             "PAYPAL" to "PayPal",
-            "MERCADOPAGO" to "MercadoPago"
+            "WOMPI" to "Wompi"
         )
         val ALL_PAYMENT_METHODS = PAYMENT_METHOD_LABELS.keys.toList()
     }

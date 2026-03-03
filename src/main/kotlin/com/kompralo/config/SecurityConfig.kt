@@ -45,6 +45,7 @@ class SecurityConfig(
                         "/api/sellers/{id}",
                         "/api/users/**",
                         "/api/public/**",
+                        "/api/webhooks/**",
                         "/uploads/**"
                     ).permitAll()
                     .anyRequest().authenticated()

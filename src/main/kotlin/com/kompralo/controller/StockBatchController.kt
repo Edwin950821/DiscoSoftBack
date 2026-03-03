@@ -10,7 +10,6 @@ import org.springframework.web.bind.annotation.*
 
 @RestController
 @RequestMapping("/api/stock/batches")
-@CrossOrigin(origins = ["http://localhost:5173"], allowCredentials = "true")
 class StockBatchController(
     private val stockBatchService: StockBatchService,
     private val userRepository: UserRepository

@@ -21,6 +21,7 @@ data class AuthResponse(
     val permissions: List<String>? = null,
     val onboarding_completed: Boolean? = false,
     val default_currency: String? = "COP",
+    val auth_provider: String? = null,
     val twoFactorRequired: Boolean = false,
     val message: String? = null
 )
@@ -49,6 +50,15 @@ data class GoogleRegisterRequest(
     val accountType: String
 )
 
+data class UpdateProfilePictureRequest(
+    val imageUrl: String
+)
+
+data class ChangePasswordRequest(
+    val currentPassword: String? = null,
+    val newPassword: String
+)
+
 data class GoogleRegisterWithTokenRequest(
     val access_token: String? = null,
     val accessToken: String? = null,
@@ -57,7 +67,8 @@ data class GoogleRegisterWithTokenRequest(
     val googleId: String? = null,
     val sub: String? = null,
     val accountType: String,
-    val isLogin: Boolean = false
+    val isLogin: Boolean = false,
+    val picture: String? = null
 ) {
     fun getToken(): String = access_token ?: accessToken ?: ""
 

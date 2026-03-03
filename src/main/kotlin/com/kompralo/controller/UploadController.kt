@@ -12,7 +12,6 @@ import java.nio.file.StandardCopyOption
 import java.util.UUID
 
 @RestController
-@CrossOrigin(origins = ["http://localhost:5173"], allowCredentials = "true")
 class UploadController {
 
     private val logger = LoggerFactory.getLogger(javaClass)

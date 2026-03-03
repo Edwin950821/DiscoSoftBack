@@ -19,7 +19,6 @@ import java.time.LocalDateTime
 
 @RestController
 @RequestMapping("/api/orders")
-@CrossOrigin(origins = ["http://localhost:5173"], allowCredentials = "true")
 class OrderController(
     private val orderService: OrderService,
     private val userRepository: UserRepository,

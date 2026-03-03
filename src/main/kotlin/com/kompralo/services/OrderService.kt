@@ -14,6 +14,7 @@ import java.time.LocalDateTime
 import java.util.UUID
 
 @Service
+@Transactional(readOnly = true)
 class OrderService(
     private val orderRepository: OrderRepository,
     private val orderItemRepository: OrderItemRepository,

@@ -67,18 +67,23 @@ class AuthService(
             ownerEmail = request.owner_email,
             plan = request.plan ?: "FREE_TRIAL",
             defaultCurrency = "COP",
+            authProvider = "email",
             createdAt = now
         )
 
         val savedUser = userRepository.save(user)
         val token = jwtService.generateToken(savedUser.email, savedUser.role.name)
 
-        return toVigxaAuthResponse(savedUser, token)
+        return toAuthResponse(savedUser, token)
     }
 
     fun login(request: LoginRequest): AuthResponse {
-        val user = userRepository.findByEmail(request.username)
+        val user = userRepository.findByEmail(request.resolvedEmail)
             .orElseThrow { IllegalArgumentException("Credenciales inválidas") }
+
+        if (user.authProvider == "google") {
+            throw IllegalArgumentException("Esta cuenta usa inicio de sesion con Google")
+        }
 
         if (!passwordEncoder.matches(request.password, user.password)) {
             throw IllegalArgumentException("Credenciales inválidas")
@@ -89,14 +94,14 @@ class AuthService(
         }
 
         if (twoFactorAuthService.isTwoFactorEnabled(user)) {
-            return toVigxaAuthResponse(user, null).copy(
+            return toAuthResponse(user, null).copy(
                 twoFactorRequired = true,
                 message = "Ingrese su código de autenticación de dos factores"
             )
         }
 
         val token = jwtService.generateToken(user.email, user.role.name)
-        return toVigxaAuthResponse(user, token)
+        return toAuthResponse(user, token)
     }
 
     fun loginWith2FA(request: LoginWith2FARequest): AuthResponse {
@@ -116,7 +121,7 @@ class AuthService(
         }
 
         val token = jwtService.generateToken(user.email, user.role.name)
-        return toVigxaAuthResponse(user, token)
+        return toAuthResponse(user, token)
     }
 
     fun googleRegister(request: GoogleRegisterRequest): AuthResponse {
@@ -140,9 +145,10 @@ class AuthService(
                 if (!user.isActive) {
                     user.isActive = true
                     user.role = role
+                    if (user.authProvider == null) user.authProvider = "google"
                     val reactivated = userRepository.save(user)
                     val token = jwtService.generateToken(reactivated.email, reactivated.role.name)
-                    return toVigxaAuthResponse(reactivated, token)
+                    return toAuthResponse(reactivated, token)
                 }
                 throw IllegalArgumentException("Este correo ya está registrado")
             }
@@ -152,12 +158,13 @@ class AuthService(
                 password = passwordEncoder.encode(googleUserId),
                 name = name,
                 role = role,
+                authProvider = "google",
                 createdAt = LocalDateTime.now()
             )
 
             val savedUser = userRepository.save(user)
             val token = jwtService.generateToken(savedUser.email, savedUser.role.name)
-            return toVigxaAuthResponse(savedUser, token)
+            return toAuthResponse(savedUser, token)
 
         } catch (e: IllegalArgumentException) {
             throw e
@@ -175,13 +182,21 @@ class AuthService(
                 val role = try { parseRole(request.accountType) } catch (_: Exception) { Role.USER }
                 user.isActive = true
                 user.role = role
+                if (user.authProvider == null) user.authProvider = "google"
+                if (user.image == null && !request.picture.isNullOrBlank()) {
+                    user.image = request.picture
+                }
                 userRepository.save(user)
                 val token = jwtService.generateToken(user.email, user.role.name)
-                return toVigxaAuthResponse(user, token)
+                return toAuthResponse(user, token)
             }
             if (request.isLogin) {
+                var needsSave = false
+                if (user.authProvider == null) { user.authProvider = "google"; needsSave = true }
+                if (user.image == null && !request.picture.isNullOrBlank()) { user.image = request.picture; needsSave = true }
+                if (needsSave) userRepository.save(user)
                 val token = jwtService.generateToken(user.email, user.role.name)
-                return toVigxaAuthResponse(user, token)
+                return toAuthResponse(user, token)
             }
             throw IllegalArgumentException("Este correo ya está registrado")
         }
@@ -198,12 +213,14 @@ class AuthService(
             password = passwordEncoder.encode(googleIdValue),
             name = request.name,
             role = role,
+            image = request.picture,
+            authProvider = "google",
             createdAt = LocalDateTime.now()
         )
 
         val savedUser = userRepository.save(user)
         val token = jwtService.generateToken(savedUser.email, savedUser.role.name)
-        return toVigxaAuthResponse(savedUser, token)
+        return toAuthResponse(savedUser, token)
     }
 
     fun googleLogin(credential: String): AuthResponse {
@@ -225,8 +242,13 @@ class AuthService(
                 throw IllegalArgumentException("Usuario inactivo")
             }
 
+            if (user.authProvider == null) {
+                user.authProvider = "google"
+                userRepository.save(user)
+            }
+
             val token = jwtService.generateToken(user.email, user.role.name)
-            return toVigxaAuthResponse(user, token)
+            return toAuthResponse(user, token)
 
         } catch (e: IllegalArgumentException) {
             throw e
@@ -236,14 +258,53 @@ class AuthService(
         }
     }
 
+    @org.springframework.transaction.annotation.Transactional
+    fun updateProfilePicture(email: String, imageUrl: String): AuthResponse {
+        val user = userRepository.findByEmail(email)
+            .orElseThrow { IllegalArgumentException("Usuario no encontrado") }
+        user.image = imageUrl
+        userRepository.save(user)
+        return toAuthResponse(user, null)
+    }
+
     fun getUserByEmail(email: String): AuthResponse {
         val user = userRepository.findByEmail(email)
             .orElseThrow { IllegalArgumentException("Usuario no encontrado") }
-        return toVigxaAuthResponse(user, null)
+        return toAuthResponse(user, null)
     }
 
     fun extractEmailFromToken(token: String): String {
         return jwtService.extractEmailFromToken(token)
+    }
+
+    @org.springframework.transaction.annotation.Transactional
+    fun changePassword(email: String, currentPassword: String?, newPassword: String) {
+        val user = userRepository.findByEmail(email)
+            .orElseThrow { IllegalArgumentException("Usuario no encontrado") }
+
+        val requiresCurrentPassword = user.authProvider == "email" || user.authProvider == "both"
+
+        if (requiresCurrentPassword) {
+            if (currentPassword.isNullOrBlank()) {
+                throw IllegalArgumentException("La contrasena actual es requerida")
+            }
+            if (!passwordEncoder.matches(currentPassword, user.password)) {
+                throw IllegalArgumentException("La contrasena actual es incorrecta")
+            }
+            if (currentPassword == newPassword) {
+                throw IllegalArgumentException("La nueva contrasena debe ser diferente a la actual")
+            }
+        }
+
+        if (newPassword.length < 8) {
+            throw IllegalArgumentException("La nueva contrasena debe tener al menos 8 caracteres")
+        }
+
+        user.password = passwordEncoder.encode(newPassword)
+        if (user.authProvider != "email") {
+            user.authProvider = "both"
+        }
+        userRepository.save(user)
     }
 
     @org.springframework.transaction.annotation.Transactional
@@ -254,7 +315,7 @@ class AuthService(
         userRepository.save(user)
     }
 
-    private fun toVigxaAuthResponse(user: User, token: String?): AuthResponse {
+    private fun toAuthResponse(user: User, token: String?): AuthResponse {
         val now = LocalDateTime.now()
         val trialEnd = now.plusDays(15)
 
@@ -284,7 +345,8 @@ class AuthService(
                 is_active = true
             ),
             permissions = listOf("ALL"),
-            default_currency = user.defaultCurrency ?: "COP"
+            default_currency = user.defaultCurrency ?: "COP",
+            auth_provider = user.authProvider
         )
     }
 }

@@ -1,6 +1,7 @@
 package com.kompralo.controller
 
 import com.kompralo.dto.PublicProductResponse
+import com.kompralo.dto.PublicVariantDTO
 import com.kompralo.model.ProductStatus
 import com.kompralo.repository.ProductRepository
 import org.springframework.http.HttpStatus
@@ -9,7 +10,6 @@ import org.springframework.web.bind.annotation.*
 
 @RestController
 @RequestMapping("/api/public/products")
-@CrossOrigin(origins = ["http://localhost:5173"], allowCredentials = "true")
 class PublicProductController(
     private val productRepository: ProductRepository,
 ) {
@@ -23,13 +23,13 @@ class PublicProductController(
         return try {
             val products = when {
                 !search.isNullOrBlank() ->
-                    productRepository.searchByStatusAndName(ProductStatus.ACTIVE, search)
+                    productRepository.searchByStatusAndNameWithDetails(ProductStatus.ACTIVE, search)
                 !category.isNullOrBlank() ->
-                    productRepository.findByStatusAndCategoryContainingIgnoreCase(ProductStatus.ACTIVE, category)
+                    productRepository.findByStatusAndCategoryWithDetails(ProductStatus.ACTIVE, category)
                 sellerId != null ->
-                    productRepository.findBySellerIdAndStatus(sellerId, ProductStatus.ACTIVE)
+                    productRepository.findBySellerIdAndStatusWithDetails(sellerId, ProductStatus.ACTIVE)
                 else ->
-                    productRepository.findByStatus(ProductStatus.ACTIVE)
+                    productRepository.findByStatusWithDetails(ProductStatus.ACTIVE)
             }
 
             val response = products.map { p ->
@@ -41,9 +41,15 @@ class PublicProductController(
                     price = p.price,
                     stock = p.stock,
                     imageUrl = p.imageUrl,
+                    imageUrls = p.images.sortedBy { it.position }.map { it.url },
+                    variants = p.variants.filter { it.active }.map { v ->
+                        PublicVariantDTO(id = v.id!!, name = v.name, priceAdjustment = v.priceAdjustment, stock = v.stock, imageUrl = v.imageUrl)
+                    },
                     description = p.description,
                     sellerId = p.seller.id!!,
                     sellerName = p.seller.name,
+                    averageRating = p.averageRating,
+                    reviewCount = p.reviewCount,
                 )
             }
 
@@ -57,8 +63,8 @@ class PublicProductController(
     @GetMapping("/{id}")
     fun getProduct(@PathVariable id: Long): ResponseEntity<*> {
         return try {
-            val product = productRepository.findById(id)
-                .orElseThrow { RuntimeException("Producto no encontrado") }
+            val product = productRepository.findByIdWithDetails(id)
+                ?: throw RuntimeException("Producto no encontrado")
 
             if (product.status != ProductStatus.ACTIVE) {
                 throw RuntimeException("Producto no disponible")
@@ -72,9 +78,15 @@ class PublicProductController(
                 price = product.price,
                 stock = product.stock,
                 imageUrl = product.imageUrl,
+                imageUrls = product.images.sortedBy { it.position }.map { it.url },
+                variants = product.variants.filter { it.active }.map { v ->
+                    PublicVariantDTO(id = v.id!!, name = v.name, priceAdjustment = v.priceAdjustment, stock = v.stock, imageUrl = v.imageUrl)
+                },
                 description = product.description,
                 sellerId = product.seller.id!!,
                 sellerName = product.seller.name,
+                averageRating = product.averageRating,
+                reviewCount = product.reviewCount,
             )
 
             ResponseEntity.ok(response)

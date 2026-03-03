@@ -315,8 +315,8 @@ class PdfService(
         PaymentMethod.DEBIT_CARD -> "Tarjeta de Debito"
         PaymentMethod.PSE -> "PSE"
         PaymentMethod.TRANSFER -> "Transferencia Bancaria"
-        PaymentMethod.MERCADOPAGO -> "MercadoPago"
         PaymentMethod.PAYPAL -> "PayPal"
+        PaymentMethod.WOMPI -> "Wompi"
         null -> "No especificado"
     }
 

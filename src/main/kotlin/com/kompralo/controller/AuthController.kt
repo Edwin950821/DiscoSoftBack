@@ -6,6 +6,8 @@ import com.kompralo.dto.GoogleRegisterWithTokenRequest
 import com.kompralo.dto.LoginRequest
 import com.kompralo.dto.LoginWith2FARequest
 import com.kompralo.dto.RegisterRequest
+import com.kompralo.dto.ChangePasswordRequest
+import com.kompralo.dto.UpdateProfilePictureRequest
 import com.kompralo.services.AuthService
 import jakarta.servlet.http.Cookie
 import jakarta.servlet.http.HttpServletResponse
@@ -15,40 +17,46 @@ import org.springframework.web.bind.annotation.*
 
 @RestController
 @RequestMapping("/api/auth")
-@CrossOrigin(origins = ["http://localhost:5173"], allowCredentials = "true")
 class AuthController(
     private val authService: AuthService
 ) {
 
-    private fun createAuthCookie(token: String): Cookie {
+    private fun createAuthCookie(token: String, isSecure: Boolean = false): Cookie {
         return Cookie("authToken", token).apply {
             isHttpOnly = true
-            secure = false
+            secure = isSecure
             path = "/"
             maxAge = 86400
-            setAttribute("SameSite", "Lax")
+            setAttribute("SameSite", if (isSecure) "None" else "Lax")
         }
     }
 
-    private fun createLogoutCookie(): Cookie {
+    private fun createLogoutCookie(isSecure: Boolean = false): Cookie {
         return Cookie("authToken", "").apply {
             isHttpOnly = true
-            secure = false
+            secure = isSecure
             path = "/"
             maxAge = 0
-            setAttribute("SameSite", "Lax")
+            setAttribute("SameSite", if (isSecure) "None" else "Lax")
         }
+    }
+
+    private fun isSecureRequest(request: jakarta.servlet.http.HttpServletRequest): Boolean {
+        return request.isSecure ||
+            request.getHeader("X-Forwarded-Proto") == "https" ||
+            request.getHeader("Origin")?.startsWith("https://") == true
     }
 
     @PostMapping("/register")
     fun register(
         @RequestBody request: RegisterRequest,
+        servletRequest: jakarta.servlet.http.HttpServletRequest,
         servletResponse: HttpServletResponse
     ): ResponseEntity<*> {
         return try {
             val response = authService.register(request)
-
-            response.token?.let { servletResponse.addCookie(createAuthCookie(it)) }
+            val secure = isSecureRequest(servletRequest)
+            response.token?.let { servletResponse.addCookie(createAuthCookie(it, secure)) }
 
             ResponseEntity.ok(response)
 
@@ -65,12 +73,13 @@ class AuthController(
     @PostMapping("/login")
     fun login(
         @RequestBody request: LoginRequest,
+        servletRequest: jakarta.servlet.http.HttpServletRequest,
         servletResponse: HttpServletResponse
     ): ResponseEntity<*> {
         return try {
             val response = authService.login(request)
-
-            response.token?.let { servletResponse.addCookie(createAuthCookie(it)) }
+            val secure = isSecureRequest(servletRequest)
+            response.token?.let { servletResponse.addCookie(createAuthCookie(it, secure)) }
 
             ResponseEntity.ok(response)
 
@@ -87,12 +96,13 @@ class AuthController(
     @PostMapping("/login/2fa")
     fun loginWith2FA(
         @RequestBody request: LoginWith2FARequest,
+        servletRequest: jakarta.servlet.http.HttpServletRequest,
         servletResponse: HttpServletResponse
     ): ResponseEntity<*> {
         return try {
             val response = authService.loginWith2FA(request)
-
-            response.token?.let { servletResponse.addCookie(createAuthCookie(it)) }
+            val secure = isSecureRequest(servletRequest)
+            response.token?.let { servletResponse.addCookie(createAuthCookie(it, secure)) }
 
             ResponseEntity.ok(response.copy(token = null))
 
@@ -109,12 +119,13 @@ class AuthController(
     @PostMapping("/google/register")
     fun googleRegister(
         @RequestBody request: GoogleRegisterRequest,
+        servletRequest: jakarta.servlet.http.HttpServletRequest,
         servletResponse: HttpServletResponse
     ): ResponseEntity<Any> {
         return try {
             val response = authService.googleRegister(request)
-
-            response.token?.let { servletResponse.addCookie(createAuthCookie(it)) }
+            val secure = isSecureRequest(servletRequest)
+            response.token?.let { servletResponse.addCookie(createAuthCookie(it, secure)) }
 
             ResponseEntity.ok(response.copy(token = null))
         } catch (e: IllegalArgumentException) {
@@ -129,22 +140,19 @@ class AuthController(
     @PostMapping("/google/register-with-token")
     fun googleRegisterWithToken(
         @RequestBody request: GoogleRegisterWithTokenRequest,
+        servletRequest: jakarta.servlet.http.HttpServletRequest,
         servletResponse: HttpServletResponse
     ): ResponseEntity<Any> {
-        println("DEBUG Controller: Recibido request - email: ${request.email}, name: ${request.name}, accountType: ${request.accountType}")
         return try {
             val response = authService.googleRegisterWithToken(request)
-
-            response.token?.let { servletResponse.addCookie(createAuthCookie(it)) }
+            val secure = isSecureRequest(servletRequest)
+            response.token?.let { servletResponse.addCookie(createAuthCookie(it, secure)) }
 
             ResponseEntity.ok(response.copy(token = null))
         } catch (e: IllegalArgumentException) {
-            println("ERROR IllegalArgument: ${e.message}")
             ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(mapOf("message" to (e.message ?: "Error en el registro con Google")))
         } catch (e: Exception) {
-            println("ERROR Exception: ${e::class.simpleName}: ${e.message}")
-            e.printStackTrace()
             ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(mapOf("message" to (e.message ?: "Error interno del servidor")))
         }
@@ -153,12 +161,13 @@ class AuthController(
     @PostMapping("/google")
     fun googleLogin(
         @RequestBody request: GoogleLoginRequest,
+        servletRequest: jakarta.servlet.http.HttpServletRequest,
         servletResponse: HttpServletResponse
     ): ResponseEntity<Any> {
         return try {
             val response = authService.googleLogin(request.credential)
-
-            response.token?.let { servletResponse.addCookie(createAuthCookie(it)) }
+            val secure = isSecureRequest(servletRequest)
+            response.token?.let { servletResponse.addCookie(createAuthCookie(it, secure)) }
 
             ResponseEntity.ok(response.copy(token = null))
         } catch (e: IllegalArgumentException) {
@@ -177,8 +186,11 @@ class AuthController(
     }
 
     @PostMapping("/logout")
-    fun logout(servletResponse: HttpServletResponse): ResponseEntity<*> {
-        servletResponse.addCookie(createLogoutCookie())
+    fun logout(
+        servletRequest: jakarta.servlet.http.HttpServletRequest,
+        servletResponse: HttpServletResponse
+    ): ResponseEntity<*> {
+        servletResponse.addCookie(createLogoutCookie(isSecureRequest(servletRequest)))
 
         return ResponseEntity.ok(mapOf("message" to "Sesión cerrada exitosamente"))
     }
@@ -195,12 +207,56 @@ class AuthController(
             val email = authService.extractEmailFromToken(token)
             authService.deleteAccount(email)
 
-            servletResponse.addCookie(createLogoutCookie())
+            servletResponse.addCookie(createLogoutCookie(isSecureRequest(request)))
 
             ResponseEntity.ok(mapOf("message" to "Cuenta eliminada exitosamente"))
         } catch (e: IllegalArgumentException) {
             ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(mapOf("message" to e.message))
+        } catch (e: Exception) {
+            ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(mapOf("message" to "Token inválido o expirado"))
+        }
+    }
+
+    @PutMapping("/change-password")
+    fun changePassword(
+        @RequestBody body: ChangePasswordRequest,
+        request: jakarta.servlet.http.HttpServletRequest
+    ): ResponseEntity<*> {
+        return try {
+            val token = request.cookies?.find { it.name == "authToken" }?.value
+                ?: throw IllegalArgumentException("No se encontro token de autenticacion")
+
+            val email = authService.extractEmailFromToken(token)
+            authService.changePassword(email, body.currentPassword, body.newPassword)
+
+            ResponseEntity.ok(mapOf("message" to "Contrasena actualizada exitosamente"))
+        } catch (e: IllegalArgumentException) {
+            ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(mapOf("message" to (e.message ?: "Error al cambiar contrasena")))
+        } catch (e: Exception) {
+            ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(mapOf("message" to "Token invalido o expirado"))
+        }
+    }
+
+    @PutMapping("/profile-picture")
+    fun updateProfilePicture(
+        @RequestBody body: UpdateProfilePictureRequest,
+        request: jakarta.servlet.http.HttpServletRequest
+    ): ResponseEntity<*> {
+        return try {
+            val token = request.cookies?.find { it.name == "authToken" }?.value
+                ?: throw IllegalArgumentException("No se encontró token de autenticación")
+
+            val email = authService.extractEmailFromToken(token)
+            val response = authService.updateProfilePicture(email, body.imageUrl)
+
+            ResponseEntity.ok(response)
+        } catch (e: IllegalArgumentException) {
+            ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(mapOf("message" to (e.message ?: "Error al actualizar foto")))
         } catch (e: Exception) {
             ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                 .body(mapOf("message" to "Token inválido o expirado"))

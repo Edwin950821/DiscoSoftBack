@@ -16,6 +16,7 @@ data class CheckoutRequest(
 data class CheckoutItemRequest(
     val productId: Long,
     val quantity: Int,
+    val variantId: Long? = null,
 )
 
 data class CheckoutResponse(

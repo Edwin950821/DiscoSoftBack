@@ -369,6 +369,79 @@ class EmailService(
         return sendHtmlEmailWithAttachment(to = to, subject = "Bienvenido a Kompralo!", htmlContent = html)
     }
 
+    fun sendProblemReport(
+        userEmail: String,
+        userName: String,
+        tipo: String,
+        seccion: String,
+        descripcion: String
+    ): Boolean {
+        val safeName = escapeHtml(userName)
+        val safeEmail = escapeHtml(userEmail)
+        val safeTipo = escapeHtml(tipo)
+        val safeSeccion = escapeHtml(seccion)
+        val safeDescripcion = escapeHtml(descripcion).replace("\n", "<br>")
+
+        val html = """
+            <!DOCTYPE html>
+            <html>
+            <head><meta charset="UTF-8"></head>
+            <body style="margin:0;padding:0;background:#f3f4f6;font-family:Arial,Helvetica,sans-serif;">
+              <table width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:40px 0;">
+                <tr><td align="center">
+                  <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 6px rgba(0,0,0,0.07);">
+                    <tr>
+                      <td style="background:linear-gradient(135deg,#d97706,#f59e0b);padding:32px;text-align:center;">
+                        <h1 style="color:#ffffff;margin:0;font-size:28px;letter-spacing:1px;">KOMPRALO</h1>
+                        <p style="color:#fef3c7;margin:8px 0 0;font-size:14px;">Reporte de Problema</p>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding:32px;">
+                        <h2 style="color:#111827;margin:0 0 16px;font-size:20px;">Nuevo reporte recibido</h2>
+                        <table width="100%" cellpadding="0" cellspacing="0" style="background:#fffbeb;border-radius:12px;margin-bottom:24px;">
+                          <tr><td style="padding:20px;">
+                            <table width="100%" cellpadding="0" cellspacing="0">
+                              <tr>
+                                <td style="color:#6b7280;font-size:12px;padding-bottom:8px;">Tipo de problema</td>
+                                <td style="color:#111827;font-size:14px;font-weight:bold;text-align:right;padding-bottom:8px;">$safeTipo</td>
+                              </tr>
+                              <tr>
+                                <td style="color:#6b7280;font-size:12px;padding-bottom:8px;">Seccion afectada</td>
+                                <td style="color:#111827;font-size:14px;text-align:right;padding-bottom:8px;">$safeSeccion</td>
+                              </tr>
+                              <tr>
+                                <td style="color:#6b7280;font-size:12px;padding-bottom:8px;">Reportado por</td>
+                                <td style="color:#111827;font-size:14px;text-align:right;padding-bottom:8px;">$safeName ($safeEmail)</td>
+                              </tr>
+                            </table>
+                          </td></tr>
+                        </table>
+                        <div style="background:#f9fafb;border-radius:12px;padding:20px;margin-bottom:16px;">
+                          <p style="color:#6b7280;font-size:12px;margin:0 0 8px;font-weight:bold;">Descripcion</p>
+                          <p style="color:#374151;font-size:14px;line-height:1.6;margin:0;">$safeDescripcion</p>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="background:#f9fafb;padding:20px;text-align:center;border-top:1px solid #e5e7eb;">
+                        <p style="color:#9ca3af;margin:0;font-size:12px;">Kompralo Marketplace - Reporte Automatico</p>
+                      </td>
+                    </tr>
+                  </table>
+                </td></tr>
+              </table>
+            </body>
+            </html>
+        """.trimIndent()
+
+        return sendHtmlEmailWithAttachment(
+            to = fromAddress,
+            subject = "[$safeTipo] Reporte de Problema - $safeName",
+            htmlContent = html
+        )
+    }
+
     fun sendSellerVerifiedEmail(to: String, businessName: String): Boolean {
         val safeName = escapeHtml(businessName)
 

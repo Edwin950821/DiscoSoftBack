@@ -11,7 +11,6 @@ import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.*
 
 @RestController
-@CrossOrigin(origins = ["http://localhost:5173"], allowCredentials = "true")
 class OfferController(
     private val offerService: OfferService,
     private val offerEmailService: OfferEmailService,

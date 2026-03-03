@@ -9,7 +9,6 @@ import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.*
 
 @RestController
-@CrossOrigin(origins = ["http://localhost:5173"], allowCredentials = "true")
 class ClaimController(
     private val claimService: ClaimService
 ) {

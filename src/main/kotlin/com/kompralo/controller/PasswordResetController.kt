@@ -10,7 +10,6 @@ import org.springframework.web.bind.annotation.*
 
 @RestController
 @RequestMapping("/api/auth/password-reset")
-@CrossOrigin(origins = ["http://localhost:5173"], allowCredentials = "true")
 class PasswordResetController(
     private val passwordResetService: PasswordResetService
 ) {

@@ -23,7 +23,6 @@ import org.springframework.web.bind.annotation.*
 
 @RestController
 @RequestMapping("/api/buyer/orders")
-@CrossOrigin(origins = ["http://localhost:5173"], allowCredentials = "true")
 class BuyerOrderController(
     private val orderRepository: OrderRepository,
     private val userRepository: UserRepository,

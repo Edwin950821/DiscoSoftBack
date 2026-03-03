@@ -13,7 +13,6 @@ import java.time.LocalDateTime
 
 @RestController
 @RequestMapping("/api")
-@CrossOrigin(origins = ["http://localhost:5173"], allowCredentials = "true")
 class TaskController(
     private val taskService: TaskService,
     private val userRepository: UserRepository

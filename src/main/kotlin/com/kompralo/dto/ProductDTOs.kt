@@ -4,6 +4,16 @@ import java.math.BigDecimal
 import java.time.LocalDate
 import java.time.LocalDateTime
 
+data class ProductVariantDTO(
+    val id: Long? = null,
+    val name: String,
+    val sku: String? = null,
+    val priceAdjustment: BigDecimal = BigDecimal.ZERO,
+    val stock: Int = 0,
+    val imageUrl: String? = null,
+    val active: Boolean = true,
+)
+
 data class ProductResponse(
     val id: Long,
     val name: String,
@@ -14,6 +24,8 @@ data class ProductResponse(
     val sales: Int,
     val status: String,
     val imageUrl: String?,
+    val imageUrls: List<String> = emptyList(),
+    val variants: List<ProductVariantDTO> = emptyList(),
     val description: String?,
     val createdAt: LocalDateTime,
     val updatedAt: LocalDateTime
@@ -26,6 +38,8 @@ data class CreateProductRequest(
     val price: BigDecimal,
     val stock: Int = 0,
     val imageUrl: String? = null,
+    val imageUrls: List<String>? = null,
+    val variants: List<ProductVariantDTO>? = null,
     val description: String? = null
 )
 
@@ -36,6 +50,8 @@ data class UpdateProductRequest(
     val price: BigDecimal? = null,
     val stock: Int? = null,
     val imageUrl: String? = null,
+    val imageUrls: List<String>? = null,
+    val variants: List<ProductVariantDTO>? = null,
     val description: String? = null,
     val status: String? = null
 )

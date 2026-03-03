@@ -50,6 +50,8 @@ interface OrderRepository : JpaRepository<Order, Long> {
 
     fun findByOrderNumber(orderNumber: String): Order?
 
+    fun findByWompiTransactionId(wompiTransactionId: String): Order?
+
     @Query("""
         SELECT o FROM Order o
         WHERE o.seller = :seller

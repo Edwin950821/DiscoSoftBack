@@ -2,15 +2,20 @@ package com.kompralo.services
 
 import com.kompralo.dto.*
 import com.kompralo.model.*
+import com.kompralo.repository.ProductImageRepository
 import com.kompralo.repository.ProductRepository
+import com.kompralo.repository.ProductVariantRepository
 import com.kompralo.repository.StockRestockRepository
 import com.kompralo.repository.UserRepository
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
 @Service
+@Transactional(readOnly = true)
 class ProductService(
     private val productRepository: ProductRepository,
+    private val productImageRepository: ProductImageRepository,
+    private val productVariantRepository: ProductVariantRepository,
     private val stockRestockRepository: StockRestockRepository,
     private val userRepository: UserRepository,
     private val notificationService: NotificationService
@@ -21,12 +26,12 @@ class ProductService(
     }
 
     fun getProductsBySeller(sellerId: Long): List<ProductResponse> {
-        return productRepository.findBySellerId(sellerId).map { it.toResponse() }
+        return productRepository.findBySellerIdWithDetails(sellerId).map { it.toResponse() }
     }
 
     fun getProductById(id: Long, sellerId: Long): ProductResponse {
-        val product = productRepository.findById(id)
-            .orElseThrow { RuntimeException("Producto no encontrado") }
+        val product = productRepository.findByIdWithDetails(id)
+            ?: throw RuntimeException("Producto no encontrado")
         if (product.seller.id != sellerId) {
             throw RuntimeException("No autorizado para ver este producto")
         }
@@ -34,7 +39,7 @@ class ProductService(
     }
 
     fun searchProducts(sellerId: Long, search: String): List<ProductResponse> {
-        return productRepository.searchBySellerAndName(sellerId, search).map { it.toResponse() }
+        return productRepository.searchBySellerAndNameWithDetails(sellerId, search).map { it.toResponse() }
     }
 
     @Transactional
@@ -59,6 +64,25 @@ class ProductService(
         )
 
         val saved = productRepository.save(product)
+
+        request.imageUrls?.forEachIndexed { index, url ->
+            saved.images.add(ProductImage(product = saved, url = url, position = index))
+        }
+        request.variants?.forEach { v ->
+            saved.variants.add(ProductVariant(
+                product = saved,
+                name = v.name,
+                sku = v.sku,
+                priceAdjustment = v.priceAdjustment,
+                stock = v.stock,
+                imageUrl = v.imageUrl,
+                active = v.active,
+            ))
+        }
+        if (saved.images.isNotEmpty() || saved.variants.isNotEmpty()) {
+            productRepository.save(saved)
+        }
+
         notificationService.createAndSend(
             userId = sellerId,
             type = NotificationType.PRODUCT_CREATED,
@@ -97,6 +121,41 @@ class ProductService(
         request.imageUrl?.let { product.imageUrl = it }
         request.description?.let { product.description = it }
         request.status?.let { product.status = ProductStatus.valueOf(it) }
+        request.imageUrls?.let { urls ->
+            product.images.clear()
+            urls.forEachIndexed { index, url ->
+                product.images.add(ProductImage(product = product, url = url, position = index))
+            }
+            if (urls.isNotEmpty()) {
+                product.imageUrl = urls[0]
+            }
+        }
+        request.variants?.let { variantDtos ->
+            val existingById = product.variants.associateBy { it.id }
+            val incomingIds = variantDtos.mapNotNull { it.id }.toSet()
+            product.variants.removeIf { it.id != null && it.id !in incomingIds }
+            variantDtos.forEach { v ->
+                val existing = v.id?.let { existingById[it] }
+                if (existing != null) {
+                    existing.name = v.name
+                    existing.sku = v.sku
+                    existing.priceAdjustment = v.priceAdjustment
+                    existing.stock = v.stock
+                    existing.imageUrl = v.imageUrl
+                    existing.active = v.active
+                } else {
+                    product.variants.add(ProductVariant(
+                        product = product,
+                        name = v.name,
+                        sku = v.sku,
+                        priceAdjustment = v.priceAdjustment,
+                        stock = v.stock,
+                        imageUrl = v.imageUrl,
+                        active = v.active,
+                    ))
+                }
+            }
+        }
 
         val saved = productRepository.save(product)
         notificationService.createAndSend(
@@ -248,6 +307,18 @@ class ProductService(
         sales = sales,
         status = status.name,
         imageUrl = imageUrl,
+        imageUrls = images.sortedBy { it.position }.map { it.url },
+        variants = variants.map { v ->
+            ProductVariantDTO(
+                id = v.id,
+                name = v.name,
+                sku = v.sku,
+                priceAdjustment = v.priceAdjustment,
+                stock = v.stock,
+                imageUrl = v.imageUrl,
+                active = v.active,
+            )
+        },
         description = description,
         createdAt = createdAt,
         updatedAt = updatedAt

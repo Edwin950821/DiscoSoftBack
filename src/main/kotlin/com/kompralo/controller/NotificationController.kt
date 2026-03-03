@@ -9,7 +9,6 @@ import org.springframework.web.bind.annotation.*
 
 @RestController
 @RequestMapping("/api/notifications")
-@CrossOrigin(origins = ["http://localhost:5173"], allowCredentials = "true")
 class NotificationController(
     private val notificationService: NotificationService,
     private val userRepository: UserRepository

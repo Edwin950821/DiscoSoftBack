@@ -9,7 +9,6 @@ import org.springframework.web.bind.annotation.*
 
 @RestController
 @RequestMapping("/api/suppliers")
-@CrossOrigin(origins = ["http://localhost:5173"], allowCredentials = "true")
 class SupplierController(
     private val supplierService: SupplierService
 ) {

@@ -6,6 +6,7 @@ import com.kompralo.repository.OrderRepository
 import com.kompralo.repository.ProductRepository
 import com.kompralo.repository.StockRestockRepository
 import com.kompralo.repository.InventoryMovementRepository
+import com.kompralo.repository.ProductVariantRepository
 import com.kompralo.repository.UserRepository
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -18,6 +19,7 @@ import java.util.concurrent.CompletableFuture
 class CheckoutService(
     private val orderRepository: OrderRepository,
     private val productRepository: ProductRepository,
+    private val productVariantRepository: ProductVariantRepository,
     private val userRepository: UserRepository,
     private val notificationService: NotificationService,
     private val stockRestockRepository: StockRestockRepository,
@@ -25,6 +27,7 @@ class CheckoutService(
     private val pdfService: PdfService,
     private val emailService: EmailService,
     private val offerService: OfferService,
+    private val wompiService: WompiService,
 ) {
 
     private val IVA_RATE = BigDecimal("0.19")
@@ -32,7 +35,11 @@ class CheckoutService(
     private val SHIPPING_BASE = BigDecimal("8000")
 
     @Transactional
-    fun checkout(buyerEmail: String, request: CheckoutRequest): CheckoutResponse {
+    fun checkout(
+        buyerEmail: String,
+        request: CheckoutRequest,
+        wompiTransactionId: String? = null,
+    ): CheckoutResponse {
         val buyer = userRepository.findByEmail(buyerEmail)
             .orElseThrow { RuntimeException("Usuario no encontrado") }
 
@@ -52,6 +59,8 @@ class CheckoutService(
         val products = productRepository.findAllByIdWithSeller(productIds)
         val productMap = products.associateBy { it.id!! }
 
+        // Pre-load variants for items that reference them
+        val variantMap = mutableMapOf<Long, ProductVariant>()
         for (item in request.items) {
             if (item.quantity <= 0) {
                 throw RuntimeException("La cantidad debe ser mayor a 0")
@@ -64,8 +73,23 @@ class CheckoutService(
                 throw RuntimeException("El producto '${product.name}' no está disponible")
             }
 
-            if (product.stock < item.quantity) {
-                throw RuntimeException("Stock insuficiente para '${product.name}'. Disponible: ${product.stock}, Solicitado: ${item.quantity}")
+            if (item.variantId != null) {
+                val variant = productVariantRepository.findById(item.variantId)
+                    .orElseThrow { RuntimeException("Variante no encontrada para '${product.name}'") }
+                if (variant.product.id != product.id) {
+                    throw RuntimeException("La variante no pertenece al producto '${product.name}'")
+                }
+                if (!variant.active) {
+                    throw RuntimeException("La variante '${variant.name}' no está disponible")
+                }
+                if (variant.stock < item.quantity) {
+                    throw RuntimeException("Stock insuficiente para '${product.name}' - ${variant.name}. Disponible: ${variant.stock}, Solicitado: ${item.quantity}")
+                }
+                variantMap[item.variantId] = variant
+            } else {
+                if (product.stock < item.quantity) {
+                    throw RuntimeException("Stock insuficiente para '${product.name}'. Disponible: ${product.stock}, Solicitado: ${item.quantity}")
+                }
             }
         }
 
@@ -96,7 +120,9 @@ class CheckoutService(
 
             for (item in sellerItems) {
                 val product = productMap[item.productId]!!
-                val itemTotal = product.price.multiply(item.quantity.toBigDecimal())
+                val variant = item.variantId?.let { variantMap[it] }
+                val effectivePrice = if (variant != null) product.price.add(variant.priceAdjustment) else product.price
+                val itemTotal = effectivePrice.multiply(item.quantity.toBigDecimal())
                 subtotal = subtotal.add(itemTotal)
                 orderItemsToCreate.add(item to product)
             }
@@ -158,8 +184,10 @@ class CheckoutService(
             val savedOrder = orderRepository.save(order)
 
             for ((item, product) in orderItemsToCreate) {
+                val variant = item.variantId?.let { variantMap[it] }
+                val basePrice = if (variant != null) product.price.add(variant.priceAdjustment) else product.price
                 val offerInfo = itemOfferMap[product.id!!]
-                val unitPrice = if (offerInfo != null) product.price.subtract(offerInfo.discountPerUnit) else product.price
+                val unitPrice = if (offerInfo != null) basePrice.subtract(offerInfo.discountPerUnit) else basePrice
                 val itemDiscount = offerInfo?.discount ?: BigDecimal.ZERO
                 val itemSubtotal = unitPrice.multiply(item.quantity.toBigDecimal())
 
@@ -168,10 +196,12 @@ class CheckoutService(
                     productId = product.id!!,
                     productName = product.name,
                     productSku = product.sku,
-                    productImageUrl = product.imageUrl,
+                    productImageUrl = variant?.imageUrl ?: product.imageUrl,
+                    variantId = variant?.id,
+                    variantName = variant?.name,
                     quantity = item.quantity,
                     unitPrice = unitPrice,
-                    originalPrice = if (offerInfo != null) product.price else null,
+                    originalPrice = if (offerInfo != null) basePrice else null,
                     discount = itemDiscount,
                     subtotal = itemSubtotal,
                 )
@@ -181,7 +211,15 @@ class CheckoutService(
                     appliedOffers.add(Triple(offerInfo.offer, product, offerInfo.discount))
                 }
 
-                product.stock -= item.quantity
+                // Deduct stock from variant if present, otherwise from product
+                if (variant != null) {
+                    variant.stock -= item.quantity
+                    productVariantRepository.save(variant)
+                    // Also update product total stock
+                    product.stock = product.variants.sumOf { it.stock }
+                } else {
+                    product.stock -= item.quantity
+                }
                 product.sales += item.quantity
                 product.updateStockStatus()
                 productRepository.save(product)
@@ -220,7 +258,10 @@ class CheckoutService(
             }
 
             if (paymentMethod != null && paymentMethod != PaymentMethod.CASH_ON_DELIVERY) {
-                savedOrder.markAsPaid(paymentMethod)
+                if (wompiTransactionId != null) {
+                    savedOrder.markAsPaid(paymentMethod)
+                    savedOrder.wompiTransactionId = wompiTransactionId
+                }
             }
 
             val finalOrder = orderRepository.save(savedOrder)
@@ -317,6 +358,77 @@ class CheckoutService(
             totalCodFee = grandCodFee,
             totalDiscount = grandDiscount,
         )
+    }
+
+    @Transactional
+    fun checkoutWithWompi(buyerEmail: String, request: WompiConfirmRequest): CheckoutResponse {
+        // Prevent double-spend: check if this transaction was already used
+        val existingOrder = orderRepository.findByWompiTransactionId(request.wompiTransactionId)
+        if (existingOrder != null) {
+            throw RuntimeException("Esta transaccion ya fue procesada (Pedido ${existingOrder.orderNumber})")
+        }
+
+        val buyer = userRepository.findByEmail(buyerEmail)
+            .orElseThrow { RuntimeException("Usuario no encontrado") }
+
+        val productIds = request.items.map { it.productId }
+        val products = productRepository.findAllByIdWithSeller(productIds)
+        val productMap = products.associateBy { it.id!! }
+
+        val itemsBySeller = request.items.groupBy { item ->
+            productMap[item.productId]!!.seller.id!!
+        }
+
+        var expectedTotal = BigDecimal.ZERO
+        for ((_, sellerItems) in itemsBySeller) {
+            var subtotal = BigDecimal.ZERO
+            var orderDiscount = BigDecimal.ZERO
+            var hasFreeShipping = false
+
+            for (item in sellerItems) {
+                val product = productMap[item.productId]!!
+                val effectivePrice = if (item.variantId != null) {
+                    val variant = productVariantRepository.findById(item.variantId).orElse(null)
+                    if (variant != null) product.price.add(variant.priceAdjustment) else product.price
+                } else product.price
+                subtotal = subtotal.add(effectivePrice.multiply(item.quantity.toBigDecimal()))
+            }
+
+            for (item in sellerItems) {
+                val product = productMap[item.productId]!!
+                try {
+                    val bestOffer = offerService.getBestOfferForProduct(product.id!!, item.quantity, buyer)
+                    if (bestOffer != null && offerService.canUserUseOffer(bestOffer, buyer)) {
+                        val discount = offerService.calculateDiscountForProduct(bestOffer, product, item.quantity)
+                        if (discount > BigDecimal.ZERO) {
+                            orderDiscount = orderDiscount.add(discount)
+                        }
+                        if (bestOffer.type == OfferType.FREE_SHIPPING) hasFreeShipping = true
+                    }
+                } catch (_: Exception) {}
+            }
+
+            val discountedSubtotal = subtotal.subtract(orderDiscount)
+            val tax = discountedSubtotal.multiply(IVA_RATE).setScale(0, java.math.RoundingMode.HALF_UP)
+            val shipping = if (hasFreeShipping) BigDecimal.ZERO else SHIPPING_BASE
+            expectedTotal = expectedTotal.add(discountedSubtotal).add(tax).add(shipping)
+        }
+
+        val expectedAmountInCents = wompiService.toCents(expectedTotal)
+        wompiService.verifyTransaction(request.wompiTransactionId, expectedAmountInCents, request.reference)
+
+        val checkoutRequest = CheckoutRequest(
+            items = request.items,
+            shippingAddress = request.shippingAddress,
+            shippingCity = request.shippingCity,
+            shippingState = request.shippingState,
+            shippingPostalCode = request.shippingPostalCode,
+            shippingPhone = request.shippingPhone,
+            paymentMethod = request.paymentMethod,
+            buyerNotes = request.buyerNotes,
+        )
+
+        return checkout(buyerEmail, checkoutRequest, request.wompiTransactionId)
     }
 
     private fun generateOrderNumber(): String {

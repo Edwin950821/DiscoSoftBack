@@ -67,7 +67,7 @@ data class User(
     val ownerEmail: String? = null,
 
     @Column(name = "image")
-    val image: String? = null,
+    var image: String? = null,
 
     @Column(name = "employee_uuid")
     val employeeUuid: String? = null,
@@ -76,7 +76,10 @@ data class User(
     val plan: String? = null,
 
     @Column(name = "default_currency")
-    val defaultCurrency: String? = null
+    val defaultCurrency: String? = null,
+
+    @Column(name = "auth_provider")
+    var authProvider: String? = null
 ) {
 
     @PreUpdate

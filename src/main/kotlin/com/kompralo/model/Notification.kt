@@ -66,7 +66,8 @@ enum class RelatedEntityType {
     USER,
     RETURN_REQUEST,
     SHIPPING_CLAIM,
-    OFFER
+    OFFER,
+    FORUM_POST
 }
 
 @Entity

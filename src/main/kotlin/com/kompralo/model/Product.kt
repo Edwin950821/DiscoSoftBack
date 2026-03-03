@@ -49,6 +49,18 @@ data class Product(
     @Column(columnDefinition = "TEXT")
     var description: String? = null,
 
+    @OneToMany(mappedBy = "product", cascade = [CascadeType.ALL], orphanRemoval = true)
+    val images: MutableSet<ProductImage> = mutableSetOf(),
+
+    @OneToMany(mappedBy = "product", cascade = [CascadeType.ALL], orphanRemoval = true)
+    val variants: MutableSet<ProductVariant> = mutableSetOf(),
+
+    @Column(nullable = false, columnDefinition = "double precision default 0.0")
+    var averageRating: Double = 0.0,
+
+    @Column(nullable = false, columnDefinition = "integer default 0")
+    var reviewCount: Int = 0,
+
     @Column(nullable = false, updatable = false)
     val createdAt: LocalDateTime = LocalDateTime.now(),
 
