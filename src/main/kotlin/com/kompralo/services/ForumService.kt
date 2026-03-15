@@ -2,8 +2,10 @@ package com.kompralo.services
 
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
+import com.kompralo.exception.*
 import com.kompralo.dto.*
 import com.kompralo.model.*
+import com.kompralo.port.NotificationPort
 import com.kompralo.repository.*
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.data.domain.PageRequest
@@ -16,7 +18,7 @@ class ForumService(
     private val forumReplyRepository: ForumReplyRepository,
     private val forumLikeRepository: ForumLikeRepository,
     private val userRepository: UserRepository,
-    private val notificationService: NotificationService
+    private val notificationPort: NotificationPort
 ) {
 
     companion object {
@@ -73,7 +75,7 @@ class ForumService(
     @Transactional
     fun getPostDetail(id: Long, currentUser: User?): ForumPostDetailResponse {
         val post = forumPostRepository.findById(id)
-            .orElseThrow { RuntimeException("Post no encontrado") }
+            .orElseThrow { EntityNotFoundException("Post", id) }
         forumPostRepository.incrementViewCount(id)
         val replies = forumReplyRepository.findByPostOrderByCreatedAtAsc(post)
         return post.toDetail(replies, currentUser, post.viewCount + 1)
@@ -81,10 +83,10 @@ class ForumService(
 
     @Transactional
     fun createPost(request: CreateForumPostRequest, user: User): ForumPostDetailResponse {
-        if (request.title.isBlank()) throw RuntimeException("El titulo no puede estar vacio")
-        if (request.content.isBlank()) throw RuntimeException("El contenido no puede estar vacio")
-        if (request.title.length > MAX_TITLE_LENGTH) throw RuntimeException("El titulo no puede exceder $MAX_TITLE_LENGTH caracteres")
-        if (request.content.length > MAX_CONTENT_LENGTH) throw RuntimeException("El contenido no puede exceder $MAX_CONTENT_LENGTH caracteres")
+        if (request.title.isBlank()) throw ValidationException("El titulo no puede estar vacio")
+        if (request.content.isBlank()) throw ValidationException("El contenido no puede estar vacio")
+        if (request.title.length > MAX_TITLE_LENGTH) throw ValidationException("El titulo no puede exceder $MAX_TITLE_LENGTH caracteres")
+        if (request.content.length > MAX_CONTENT_LENGTH) throw ValidationException("El contenido no puede exceder $MAX_CONTENT_LENGTH caracteres")
         val post = ForumPost(
             title = request.title.trim(),
             content = request.content.trim(),
@@ -99,14 +101,14 @@ class ForumService(
     @Transactional
     fun updatePost(id: Long, request: UpdateForumPostRequest, user: User): ForumPostDetailResponse {
         val post = forumPostRepository.findById(id)
-            .orElseThrow { RuntimeException("Post no encontrado") }
-        if (post.author.id != user.id) throw RuntimeException("No tienes permiso para editar este post")
+            .orElseThrow { EntityNotFoundException("Post", id) }
+        if (post.author.id != user.id) throw UnauthorizedActionException("No tienes permiso para editar este post")
         request.title?.let {
-            if (it.length > MAX_TITLE_LENGTH) throw RuntimeException("El titulo no puede exceder $MAX_TITLE_LENGTH caracteres")
+            if (it.length > MAX_TITLE_LENGTH) throw ValidationException("El titulo no puede exceder $MAX_TITLE_LENGTH caracteres")
             post.title = it.trim()
         }
         request.content?.let {
-            if (it.length > MAX_CONTENT_LENGTH) throw RuntimeException("El contenido no puede exceder $MAX_CONTENT_LENGTH caracteres")
+            if (it.length > MAX_CONTENT_LENGTH) throw ValidationException("El contenido no puede exceder $MAX_CONTENT_LENGTH caracteres")
             post.content = it.trim()
         }
         request.category?.let { post.category = it }
@@ -118,21 +120,21 @@ class ForumService(
     @Transactional
     fun deletePost(id: Long, user: User) {
         val post = forumPostRepository.findById(id)
-            .orElseThrow { RuntimeException("Post no encontrado") }
-        if (post.author.id != user.id) throw RuntimeException("No tienes permiso para eliminar este post")
+            .orElseThrow { EntityNotFoundException("Post", id) }
+        if (post.author.id != user.id) throw UnauthorizedActionException("No tienes permiso para eliminar este post")
         forumPostRepository.delete(post)
     }
 
     @Transactional
     fun createReply(postId: Long, request: CreateForumReplyRequest, user: User): ForumReplyResponse {
-        if (request.content.isBlank()) throw RuntimeException("La respuesta no puede estar vacia")
-        if (request.content.length > MAX_REPLY_LENGTH) throw RuntimeException("La respuesta no puede exceder $MAX_REPLY_LENGTH caracteres")
+        if (request.content.isBlank()) throw ValidationException("La respuesta no puede estar vacia")
+        if (request.content.length > MAX_REPLY_LENGTH) throw ValidationException("La respuesta no puede exceder $MAX_REPLY_LENGTH caracteres")
         val post = forumPostRepository.findById(postId)
-            .orElseThrow { RuntimeException("Post no encontrado") }
+            .orElseThrow { EntityNotFoundException("Post", postId) }
         val parentReply = request.parentReplyId?.let {
             val parent = forumReplyRepository.findById(it)
-                .orElseThrow { RuntimeException("Respuesta padre no encontrada") }
-            if (parent.post.id != post.id) throw RuntimeException("La respuesta padre no pertenece a este post")
+                .orElseThrow { EntityNotFoundException("Respuesta", it) }
+            if (parent.post.id != post.id) throw BusinessRuleViolationException("La respuesta padre no pertenece a este post")
             parent
         }
         val reply = ForumReply(
@@ -146,7 +148,7 @@ class ForumService(
 
         if (post.author.id != user.id) {
             try {
-                notificationService.createAndSend(
+                notificationPort.createAndSend(
                     userId = post.author.id!!,
                     type = NotificationType.MESSAGE_RECEIVED,
                     title = "Nueva respuesta en tu post",
@@ -161,7 +163,7 @@ class ForumService(
 
         if (parentReply != null && parentReply.author.id != user.id && parentReply.author.id != post.author.id) {
             try {
-                notificationService.createAndSend(
+                notificationPort.createAndSend(
                     userId = parentReply.author.id!!,
                     type = NotificationType.MESSAGE_RECEIVED,
                     title = "Respondieron a tu comentario",
@@ -180,8 +182,8 @@ class ForumService(
     @Transactional
     fun deleteReply(replyId: Long, user: User) {
         val reply = forumReplyRepository.findById(replyId)
-            .orElseThrow { RuntimeException("Respuesta no encontrada") }
-        if (reply.author.id != user.id) throw RuntimeException("No tienes permiso para eliminar esta respuesta")
+            .orElseThrow { EntityNotFoundException("Respuesta", replyId) }
+        if (reply.author.id != user.id) throw UnauthorizedActionException("No tienes permiso para eliminar esta respuesta")
         forumReplyRepository.nullifyParentReply(replyId)
         forumReplyRepository.delete(reply)
     }
@@ -189,7 +191,7 @@ class ForumService(
     @Transactional
     fun toggleLike(postId: Long, user: User): ForumLikeResponse {
         val post = forumPostRepository.findById(postId)
-            .orElseThrow { RuntimeException("Post no encontrado") }
+            .orElseThrow { EntityNotFoundException("Post", postId) }
         val existing = forumLikeRepository.findByPostAndUser(post, user)
         val liked = if (existing != null) {
             forumLikeRepository.delete(existing)
@@ -214,6 +216,13 @@ class ForumService(
         picture = image
     )
 
+    private fun ForumReply.toPreview() = ReplyPreviewResponse(
+        id = id!!,
+        author = author.toAuthor(),
+        content = content.take(150),
+        createdAt = createdAt
+    )
+
     private fun ForumPost.toSummary(currentUser: User?) = ForumPostSummaryResponse(
         id = id!!,
         title = title,
@@ -225,6 +234,7 @@ class ForumService(
         likeCount = forumLikeRepository.countByPost(this),
         likedByCurrentUser = currentUser?.let { u -> forumLikeRepository.existsByPostAndUser(this, u) } ?: false,
         imageUrls = parseImageUrls(imageUrls),
+        latestReplies = forumReplyRepository.findTop2ByPostOrderByCreatedAtDesc(this).map { it.toPreview() },
         createdAt = createdAt,
         updatedAt = updatedAt
     )

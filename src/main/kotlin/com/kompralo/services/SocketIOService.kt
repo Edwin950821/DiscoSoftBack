@@ -1,35 +1,88 @@
 package com.kompralo.services
 
+import com.corundumstudio.socketio.SocketIOClient
 import com.corundumstudio.socketio.SocketIOServer
 import com.corundumstudio.socketio.listener.ConnectListener
 import com.corundumstudio.socketio.listener.DataListener
 import com.corundumstudio.socketio.listener.DisconnectListener
 import jakarta.annotation.PostConstruct
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 
 @Service
 class SocketIOService(
-    private val socketIOServer: SocketIOServer
+    private val socketIOServer: SocketIOServer,
+    private val jwtService: JwtService
 ) {
+
+    private val log = LoggerFactory.getLogger(SocketIOService::class.java)
 
     @PostConstruct
     fun startServer() {
         socketIOServer.addConnectListener(ConnectListener { client ->
-            val userId = client.handshakeData.getSingleUrlParam("userId")
-            println("Cliente conectado: ${client.sessionId}, userId: $userId")
+            val token = extractTokenFromHandshake(client)
 
-            userId?.let {
-                client.joinRoom("user_$it")
-                println("Usuario $it unido a room user_$it")
+            if (token.isNullOrBlank()) {
+                log.warn("Conexion Socket.IO rechazada: sin token")
+                client.disconnect()
+                return@ConnectListener
+            }
+
+            try {
+                if (!jwtService.validateToken(token)) {
+                    log.warn("Conexion Socket.IO rechazada: token invalido")
+                    client.disconnect()
+                    return@ConnectListener
+                }
+
+                val email = jwtService.extractUsername(token)
+                val role = jwtService.extractRole(token)
+                client.set("email", email)
+                client.set("role", role)
+
+                val userId = client.handshakeData.getSingleUrlParam("userId")
+                userId?.let {
+                    client.joinRoom("user_$it")
+                }
+
+                val meseroId = client.handshakeData.getSingleUrlParam("meseroId")
+
+                when (role) {
+                    "ADMIN" -> {
+                        client.joinRoom("disco_admin")
+                        log.info("Admin conectado a disco_admin: {}", email)
+                    }
+                    "OWNER" -> {
+                        client.joinRoom("disco_admin")
+                        log.info("Dueño conectado a disco_admin: {}", email)
+                    }
+                    "MESERO" -> {
+                        meseroId?.let {
+                            client.joinRoom("disco_mesero_$it")
+                            client.set("meseroId", it)
+                        }
+                        client.joinRoom("disco_meseros")
+                        log.info("Mesero conectado: {} (meseroId: {})", email, meseroId)
+                    }
+                }
+
+                log.debug("Socket.IO conectado: {} ({}) role={}", client.sessionId, email, role)
+            } catch (e: Exception) {
+                log.warn("Conexion Socket.IO rechazada: {}", e.message)
+                client.disconnect()
             }
         })
 
         socketIOServer.addDisconnectListener(DisconnectListener { client ->
-            println("Cliente desconectado: ${client.sessionId}")
+            log.debug("Socket.IO desconectado: {}", client.sessionId)
         })
 
         socketIOServer.addEventListener("message", Map::class.java, DataListener { client, data, ackRequest ->
-            println("Mensaje recibido de ${client.sessionId}: $data")
+            val email = client.get<String>("email")
+            if (email == null) {
+                client.disconnect()
+                return@DataListener
+            }
 
             socketIOServer.broadcastOperations.sendEvent("message", data)
 
@@ -39,28 +92,36 @@ class SocketIOService(
         })
 
         socketIOServer.addEventListener("private_notification", Map::class.java, DataListener { client, data, _ ->
+            val email = client.get<String>("email")
+            if (email == null) {
+                client.disconnect()
+                return@DataListener
+            }
+
             val targetUserId = data["targetUserId"] as? String
             targetUserId?.let {
                 socketIOServer.getRoomOperations("user_$it").sendEvent("notification", data)
-                println("Notificación enviada a user_$it")
             }
         })
 
         socketIOServer.addEventListener("join_room", String::class.java, DataListener { client, roomName, _ ->
+            val email = client.get<String>("email")
+            if (email == null) {
+                client.disconnect()
+                return@DataListener
+            }
             client.joinRoom(roomName)
-            println("Cliente ${client.sessionId} unido a room: $roomName")
         })
 
         socketIOServer.addEventListener("leave_room", String::class.java, DataListener { client, roomName, _ ->
             client.leaveRoom(roomName)
-            println("Cliente ${client.sessionId} salió de room: $roomName")
         })
 
         try {
             socketIOServer.start()
-            println("Socket.IO server iniciado en puerto ${socketIOServer.configuration.port}")
+            log.info("Socket.IO server iniciado en puerto {}", socketIOServer.configuration.port)
         } catch (e: Exception) {
-            println("WARN: No se pudo iniciar Socket.IO en puerto ${socketIOServer.configuration.port}: ${e.message}")
+            log.warn("No se pudo iniciar Socket.IO en puerto {}: {}", socketIOServer.configuration.port, e.message)
         }
     }
 
@@ -74,5 +135,26 @@ class SocketIOService(
 
     fun sendToRoom(room: String, event: String, data: Any) {
         socketIOServer.getRoomOperations(room).sendEvent(event, data)
+    }
+
+    fun sendToAdmin(event: String, data: Any) {
+        socketIOServer.getRoomOperations("disco_admin").sendEvent(event, data)
+    }
+
+    fun sendToMesero(meseroId: String, event: String, data: Any) {
+        socketIOServer.getRoomOperations("disco_mesero_$meseroId").sendEvent(event, data)
+    }
+
+    fun sendToAllMeseros(event: String, data: Any) {
+        socketIOServer.getRoomOperations("disco_meseros").sendEvent(event, data)
+    }
+
+    private fun extractTokenFromHandshake(client: SocketIOClient): String? {
+        val queryToken = client.handshakeData.getSingleUrlParam("token")
+        if (!queryToken.isNullOrBlank()) return queryToken
+
+        val cookieHeader = client.handshakeData.httpHeaders.get("Cookie") ?: return null
+        val match = Regex("authToken=([^;]+)").find(cookieHeader)
+        return match?.groupValues?.get(1)
     }
 }

@@ -1,5 +1,8 @@
 package com.kompralo.services
 
+import com.kompralo.exception.*
+import com.kompralo.config.ShippingConfiguration
+import com.kompralo.config.TaxConfiguration
 import com.kompralo.dto.WompiCustomerData
 import com.kompralo.dto.WompiInitRequest
 import com.kompralo.dto.WompiInitResponse
@@ -18,19 +21,18 @@ class WompiInitService(
     private val userRepository: UserRepository,
     private val offerService: OfferService,
     private val wompiService: WompiService,
+    private val taxConfig: TaxConfiguration,
+    private val shippingConfig: ShippingConfiguration,
 ) {
     @Value("\${app.frontend-url}")
     private lateinit var frontendUrl: String
 
-    private val IVA_RATE = BigDecimal("0.19")
-    private val SHIPPING_BASE = BigDecimal("8000")
-
     fun initializePayment(buyerEmail: String, request: WompiInitRequest): WompiInitResponse {
         val buyer = userRepository.findByEmail(buyerEmail)
-            .orElseThrow { RuntimeException("Usuario no encontrado") }
+            .orElseThrow { EntityNotFoundException("Usuario", buyerEmail) }
 
         if (request.items.isEmpty()) {
-            throw RuntimeException("El carrito esta vacio")
+            throw ValidationException("El carrito esta vacio")
         }
 
         val productIds = request.items.map { it.productId }
@@ -39,15 +41,15 @@ class WompiInitService(
 
         for (item in request.items) {
             if (item.quantity <= 0) {
-                throw RuntimeException("La cantidad debe ser mayor a 0")
+                throw ValidationException("La cantidad debe ser mayor a 0")
             }
             val product = productMap[item.productId]
-                ?: throw RuntimeException("Producto con ID ${item.productId} no encontrado")
+                ?: throw EntityNotFoundException("Producto", item.productId)
             if (product.status != com.kompralo.model.ProductStatus.ACTIVE) {
-                throw RuntimeException("El producto '${product.name}' no esta disponible")
+                throw BusinessRuleViolationException("El producto '${product.name}' no esta disponible")
             }
             if (product.stock < item.quantity) {
-                throw RuntimeException("Stock insuficiente para '${product.name}'")
+                throw BusinessRuleViolationException("Stock insuficiente para '${product.name}'")
             }
         }
 
@@ -85,8 +87,8 @@ class WompiInitService(
             }
 
             val discountedSubtotal = subtotal.subtract(orderDiscount)
-            val tax = discountedSubtotal.multiply(IVA_RATE).setScale(0, RoundingMode.HALF_UP)
-            val shipping = if (hasFreeShipping) BigDecimal.ZERO else SHIPPING_BASE
+            val tax = discountedSubtotal.multiply(taxConfig.ivaRate).setScale(0, RoundingMode.HALF_UP)
+            val shipping = if (hasFreeShipping) BigDecimal.ZERO else shippingConfig.baseRate
 
             grandTotal = grandTotal.add(discountedSubtotal).add(tax).add(shipping)
             grandTax = grandTax.add(tax)

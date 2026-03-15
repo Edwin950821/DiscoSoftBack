@@ -6,6 +6,7 @@ import com.kompralo.model.Offer
 import com.kompralo.model.User
 import com.kompralo.repository.EmailDeliveryLogRepository
 import com.kompralo.repository.OrderRepository
+import com.kompralo.port.EmailPort
 import com.kompralo.repository.StoreFollowerRepository
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
@@ -16,7 +17,7 @@ import java.time.format.DateTimeFormatter
 
 @Service
 class OfferEmailService(
-    private val emailService: EmailService,
+    private val emailPort: EmailPort,
     private val orderRepository: OrderRepository,
     private val storeFollowerRepository: StoreFollowerRepository,
     private val emailDeliveryLogRepository: EmailDeliveryLogRepository
@@ -56,7 +57,7 @@ class OfferEmailService(
             }
 
             try {
-                val sent = emailService.sendHtmlEmailWithAttachment(
+                val sent = emailPort.sendHtmlEmailWithAttachment(
                     to = recipient.email!!,
                     subject = subject,
                     htmlContent = html

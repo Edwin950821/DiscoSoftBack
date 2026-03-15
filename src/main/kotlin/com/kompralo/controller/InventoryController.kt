@@ -2,7 +2,6 @@ package com.kompralo.controller
 
 import com.kompralo.dto.AdjustStockRequest
 import com.kompralo.services.InventoryService
-import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.*
@@ -19,12 +18,7 @@ class InventoryController(
         @RequestParam(required = false) status: String?,
         authentication: Authentication,
     ): ResponseEntity<*> {
-        return try {
-            ResponseEntity.ok(inventoryService.getInventoryItems(authentication.name, search, status))
-        } catch (e: Exception) {
-            ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(mapOf("message" to (e.message ?: "Error al obtener inventario")))
-        }
+        return ResponseEntity.ok(inventoryService.getInventoryItems(authentication.name, search, status))
     }
 
     @GetMapping("/{id}")
@@ -32,12 +26,7 @@ class InventoryController(
         @PathVariable id: Long,
         authentication: Authentication,
     ): ResponseEntity<*> {
-        return try {
-            ResponseEntity.ok(inventoryService.getInventoryItem(authentication.name, id))
-        } catch (e: RuntimeException) {
-            ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(mapOf("message" to (e.message ?: "No encontrado")))
-        }
+        return ResponseEntity.ok(inventoryService.getInventoryItem(authentication.name, id))
     }
 
     @PostMapping("/adjust")
@@ -45,12 +34,7 @@ class InventoryController(
         @RequestBody request: AdjustStockRequest,
         authentication: Authentication,
     ): ResponseEntity<*> {
-        return try {
-            ResponseEntity.ok(inventoryService.adjustStock(authentication.name, request))
-        } catch (e: RuntimeException) {
-            ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(mapOf("message" to (e.message ?: "Error al ajustar stock")))
-        }
+        return ResponseEntity.ok(inventoryService.adjustStock(authentication.name, request))
     }
 
     @GetMapping("/movements")
@@ -60,12 +44,7 @@ class InventoryController(
         @RequestParam(defaultValue = "50") size: Int,
         authentication: Authentication,
     ): ResponseEntity<*> {
-        return try {
-            val safeSize = size.coerceIn(1, 100)
-            ResponseEntity.ok(inventoryService.getMovements(authentication.name, productId, page, safeSize))
-        } catch (e: Exception) {
-            ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(mapOf("message" to (e.message ?: "Error al obtener movimientos")))
-        }
+        val safeSize = size.coerceIn(1, 100)
+        return ResponseEntity.ok(inventoryService.getMovements(authentication.name, productId, page, safeSize))
     }
 }

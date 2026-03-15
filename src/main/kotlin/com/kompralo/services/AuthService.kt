@@ -81,17 +81,31 @@ class AuthService(
         val user = userRepository.findByEmail(request.resolvedEmail)
             .orElseThrow { IllegalArgumentException("Credenciales inválidas") }
 
+        if (user.lockedUntil != null && user.lockedUntil!!.isAfter(LocalDateTime.now())) {
+            throw IllegalArgumentException("Cuenta bloqueada temporalmente. Intenta de nuevo en unos minutos.")
+        }
+
         if (user.authProvider == "google") {
             throw IllegalArgumentException("Esta cuenta usa inicio de sesion con Google")
         }
 
         if (!passwordEncoder.matches(request.password, user.password)) {
+            val newAttempts = user.getFailedAttempts() + 1
+            user.failedLoginAttempts = newAttempts
+            if (newAttempts >= 5) {
+                user.lockedUntil = LocalDateTime.now().plusMinutes(15)
+            }
+            userRepository.save(user)
             throw IllegalArgumentException("Credenciales inválidas")
         }
 
-        if (!user.isActive) {
+        if (!user.isUserActive()) {
             throw IllegalArgumentException("Usuario inactivo")
         }
+
+        user.failedLoginAttempts = 0
+        user.lockedUntil = null
+        userRepository.save(user)
 
         if (twoFactorAuthService.isTwoFactorEnabled(user)) {
             return toAuthResponse(user, null).copy(
@@ -112,7 +126,7 @@ class AuthService(
             throw IllegalArgumentException("Credenciales inválidas")
         }
 
-        if (!user.isActive) {
+        if (!user.isUserActive()) {
             throw IllegalArgumentException("Usuario inactivo")
         }
 
@@ -142,7 +156,7 @@ class AuthService(
             val existingUser = userRepository.findByEmail(email)
             if (existingUser.isPresent) {
                 val user = existingUser.get()
-                if (!user.isActive) {
+                if (!user.isUserActive()) {
                     user.isActive = true
                     user.role = role
                     if (user.authProvider == null) user.authProvider = "google"
@@ -178,12 +192,12 @@ class AuthService(
         val existingUser = userRepository.findByEmail(request.email)
         if (existingUser.isPresent) {
             val user = existingUser.get()
-            if (!user.isActive) {
+            if (!user.isUserActive()) {
                 val role = try { parseRole(request.accountType) } catch (_: Exception) { Role.USER }
                 user.isActive = true
                 user.role = role
                 if (user.authProvider == null) user.authProvider = "google"
-                if (user.image == null && !request.picture.isNullOrBlank()) {
+                if (user.image == null && !request.picture.isNullOrBlank() && role == Role.USER) {
                     user.image = request.picture
                 }
                 userRepository.save(user)
@@ -193,7 +207,7 @@ class AuthService(
             if (request.isLogin) {
                 var needsSave = false
                 if (user.authProvider == null) { user.authProvider = "google"; needsSave = true }
-                if (user.image == null && !request.picture.isNullOrBlank()) { user.image = request.picture; needsSave = true }
+                if (user.image == null && !request.picture.isNullOrBlank() && user.role == Role.USER) { user.image = request.picture; needsSave = true }
                 if (needsSave) userRepository.save(user)
                 val token = jwtService.generateToken(user.email, user.role.name)
                 return toAuthResponse(user, token)
@@ -213,7 +227,7 @@ class AuthService(
             password = passwordEncoder.encode(googleIdValue),
             name = request.name,
             role = role,
-            image = request.picture,
+            image = if (role == Role.USER) request.picture else null,
             authProvider = "google",
             createdAt = LocalDateTime.now()
         )
@@ -238,7 +252,7 @@ class AuthService(
             val user = userRepository.findByEmail(email)
                 .orElseThrow { IllegalArgumentException("No tienes una cuenta registrada. Por favor regístrate primero.") }
 
-            if (!user.isActive) {
+            if (!user.isUserActive()) {
                 throw IllegalArgumentException("Usuario inactivo")
             }
 
@@ -321,7 +335,7 @@ class AuthService(
 
         return AuthResponse(
             token = token,
-            active = user.isActive,
+            active = user.isUserActive(),
             code = user.code ?: "",
             company_uuid = user.companyUuid ?: "",
             created_at = user.createdAt.toString(),

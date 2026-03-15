@@ -1,11 +1,13 @@
 package com.kompralo.services
 
+import com.kompralo.exception.*
 import com.kompralo.model.EmailDeliveryLog
 import com.kompralo.model.StoreFollower
 import com.kompralo.model.User
 import com.kompralo.repository.EmailDeliveryLogRepository
 import com.kompralo.repository.OfferRepository
 import com.kompralo.repository.StoreFollowerRepository
+import com.kompralo.port.EmailPort
 import com.kompralo.repository.UserRepository
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
@@ -18,7 +20,7 @@ class StoreFollowerService(
     private val storeFollowerRepository: StoreFollowerRepository,
     private val userRepository: UserRepository,
     private val offerRepository: OfferRepository,
-    private val emailService: EmailService,
+    private val emailPort: EmailPort,
     private val emailDeliveryLogRepository: EmailDeliveryLogRepository
 ) {
     private val logger = LoggerFactory.getLogger(StoreFollowerService::class.java)
@@ -29,10 +31,10 @@ class StoreFollowerService(
     @Transactional
     fun followStore(buyer: User, sellerId: Long) {
         val seller = userRepository.findById(sellerId)
-            .orElseThrow { RuntimeException("Tienda no encontrada") }
+            .orElseThrow { EntityNotFoundException("Tienda", sellerId) }
 
         if (buyer.id == sellerId) {
-            throw RuntimeException("No puedes seguir tu propia tienda")
+            throw BusinessRuleViolationException("No puedes seguir tu propia tienda")
         }
 
         if (storeFollowerRepository.existsByBuyerAndSeller(buyer, seller)) {
@@ -62,7 +64,7 @@ class StoreFollowerService(
 
                 val html = buildWelcomeOfferEmail(offer.title, badge, customMessage, endDateStr, sellerName, offer.imageUrl)
 
-                val sent = emailService.sendHtmlEmailWithAttachment(
+                val sent = emailPort.sendHtmlEmailWithAttachment(
                     to = buyer.email!!,
                     subject = subject,
                     htmlContent = html
@@ -141,7 +143,7 @@ class StoreFollowerService(
     @Transactional
     fun unfollowStore(buyer: User, sellerId: Long) {
         val seller = userRepository.findById(sellerId)
-            .orElseThrow { RuntimeException("Tienda no encontrada") }
+            .orElseThrow { EntityNotFoundException("Tienda", sellerId) }
 
         storeFollowerRepository.deleteByBuyerAndSeller(buyer, seller)
     }

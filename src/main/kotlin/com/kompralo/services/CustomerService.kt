@@ -1,5 +1,6 @@
 package com.kompralo.services
 
+import com.kompralo.exception.*
 import com.kompralo.dto.CustomerResponse
 import com.kompralo.dto.CustomerStatsResponse
 import com.kompralo.model.User
@@ -58,11 +59,11 @@ class CustomerService(
     fun getCustomerById(customerId: Long, sellerEmail: String): CustomerResponse {
         val seller = findSeller(sellerEmail)
         val buyer = userRepository.findById(customerId)
-            .orElseThrow { RuntimeException("Cliente no encontrado") }
+            .orElseThrow { EntityNotFoundException("Cliente", customerId) }
 
         val orderCount = orderRepository.countByBuyerAndSeller(buyer, seller)
         if (orderCount == 0L) {
-            throw RuntimeException("Este cliente no tiene órdenes con tu tienda")
+            throw BusinessRuleViolationException("Este cliente no tiene órdenes con tu tienda")
         }
 
         return buildCustomerResponse(buyer, seller)
@@ -139,7 +140,7 @@ class CustomerService(
             state = profile?.state,
             postalCode = profile?.postalCode,
             country = profile?.country ?: "Colombia",
-            isActive = buyer.isActive,
+            isActive = buyer.isActive ?: true,
             totalOrders = totalOrders,
             totalSpent = totalSpent,
             avgOrderValue = avgOrderValue,
@@ -174,6 +175,6 @@ class CustomerService(
 
     private fun findSeller(email: String): User {
         return userRepository.findByEmail(email)
-            .orElseThrow { RuntimeException("Vendedor no encontrado") }
+            .orElseThrow { EntityNotFoundException("Vendedor", email) }
     }
 }

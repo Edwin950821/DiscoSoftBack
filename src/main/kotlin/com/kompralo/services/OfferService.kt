@@ -1,11 +1,13 @@
 package com.kompralo.services
 
+import com.kompralo.exception.*
 import com.kompralo.dto.*
 import com.kompralo.model.*
 import com.kompralo.repository.OfferRepository
 import com.kompralo.repository.OfferUsageRepository
 import com.kompralo.repository.ProductRepository
 import com.kompralo.repository.SpecialDayRepository
+import com.kompralo.port.OfferCalculationPort
 import org.slf4j.LoggerFactory
 import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
@@ -23,26 +25,26 @@ class OfferService(
     private val productRepository: ProductRepository,
     private val offerEmailService: OfferEmailService,
     private val pushNotificationService: PushNotificationService
-) {
+) : OfferCalculationPort {
     private val logger = LoggerFactory.getLogger(OfferService::class.java)
 
     @Transactional
     fun createOffer(seller: User?, request: CreateOfferRequest): OfferResponse {
         if (request.endDate.isBefore(request.startDate)) {
-            throw RuntimeException("La fecha de fin debe ser posterior a la fecha de inicio")
+            throw ValidationException("La fecha de fin debe ser posterior a la fecha de inicio")
         }
         if (request.type != OfferType.FREE_SHIPPING && request.discountValue <= BigDecimal.ZERO) {
-            throw RuntimeException("El valor del descuento debe ser mayor a 0")
+            throw ValidationException("El valor del descuento debe ser mayor a 0")
         }
         if (request.type == OfferType.PERCENTAGE && request.discountValue > BigDecimal("100")) {
-            throw RuntimeException("El porcentaje de descuento no puede ser mayor a 100%")
+            throw ValidationException("El porcentaje de descuento no puede ser mayor a 100%")
         }
 
         val now = LocalDateTime.now()
         val status = when {
             request.startDate.isAfter(now) -> OfferStatus.SCHEDULED
             request.endDate.isAfter(now) -> OfferStatus.ACTIVE
-            else -> throw RuntimeException("La oferta ya habría expirado")
+            else -> throw ValidationException("La oferta ya habría expirado")
         }
 
         val offer = Offer(
@@ -100,14 +102,14 @@ class OfferService(
     @Transactional
     fun updateOffer(offerId: Long, seller: User?, request: UpdateOfferRequest): OfferResponse {
         val offer = offerRepository.findById(offerId)
-            .orElseThrow { RuntimeException("Oferta no encontrada") }
+            .orElseThrow { EntityNotFoundException("Oferta", offerId) }
 
         if (seller != null && offer.seller?.id != seller.id) {
-            throw RuntimeException("No tienes permiso para editar esta oferta")
+            throw UnauthorizedActionException("No tienes permiso para editar esta oferta")
         }
 
         if (offer.status == OfferStatus.EXPIRED || offer.status == OfferStatus.CANCELLED) {
-            throw RuntimeException("No se puede editar una oferta expirada o cancelada")
+            throw BusinessRuleViolationException("No se puede editar una oferta expirada o cancelada")
         }
 
         request.title?.let { offer.title = it }
@@ -138,10 +140,10 @@ class OfferService(
     @Transactional
     fun cancelOffer(offerId: Long, seller: User?) {
         val offer = offerRepository.findById(offerId)
-            .orElseThrow { RuntimeException("Oferta no encontrada") }
+            .orElseThrow { EntityNotFoundException("Oferta", offerId) }
 
         if (seller != null && offer.seller?.id != seller.id) {
-            throw RuntimeException("No tienes permiso para cancelar esta oferta")
+            throw UnauthorizedActionException("No tienes permiso para cancelar esta oferta")
         }
 
         offer.status = OfferStatus.CANCELLED
@@ -206,7 +208,7 @@ class OfferService(
         }.filter { it.savedAmount > BigDecimal.ZERO || it.type == OfferType.FREE_SHIPPING }
     }
 
-    fun getBestOfferForProduct(productId: Long, quantity: Int, user: User): Offer? {
+    override fun getBestOfferForProduct(productId: Long, quantity: Int, user: User): Offer? {
         val product = productRepository.findById(productId).orElse(null) ?: return null
         val now = LocalDateTime.now()
 
@@ -222,7 +224,7 @@ class OfferService(
             .maxByOrNull { calculateDiscountForProduct(it, product, quantity) }
     }
 
-    fun calculateDiscountForProduct(offer: Offer, product: Product, quantity: Int): BigDecimal {
+    override fun calculateDiscountForProduct(offer: Offer, product: Product, quantity: Int): BigDecimal {
         val price = product.price
         return when (offer.type) {
             OfferType.PERCENTAGE -> {
@@ -249,7 +251,7 @@ class OfferService(
         }
     }
 
-    fun canUserUseOffer(offer: Offer, user: User): Boolean {
+    override fun canUserUseOffer(offer: Offer, user: User): Boolean {
         if (!offer.hasUsesRemaining()) return false
         val perUserLimit = offer.maxUsesPerUser ?: return true
         val userUses = offerUsageRepository.countByOfferAndUser(offer, user)
@@ -257,7 +259,7 @@ class OfferService(
     }
 
     @Transactional
-    fun recordUsage(offer: Offer, user: User, order: Order, discountApplied: BigDecimal) {
+    override fun recordUsage(offer: Offer, user: User, order: Order, discountApplied: BigDecimal) {
         offerUsageRepository.save(
             OfferUsage(
                 offer = offer,
@@ -286,7 +288,7 @@ class OfferService(
 
     fun getOfferById(offerId: Long): OfferResponse {
         val offer = offerRepository.findById(offerId)
-            .orElseThrow { RuntimeException("Oferta no encontrada") }
+            .orElseThrow { EntityNotFoundException("Oferta", offerId) }
         return offer.toResponse()
     }
 
@@ -306,9 +308,9 @@ class OfferService(
     @Transactional
     fun updateSpecialDay(id: Long, seller: User, request: SpecialDayRequest): SpecialDayResponse {
         val day = specialDayRepository.findById(id)
-            .orElseThrow { RuntimeException("Dia especial no encontrado") }
+            .orElseThrow { EntityNotFoundException("Dia especial", id) }
         if (day.seller?.id != seller.id) {
-            throw RuntimeException("No tienes permiso para editar este dia especial")
+            throw UnauthorizedActionException("No tienes permiso para editar este dia especial")
         }
         day.name = request.name
         day.date = LocalDate.parse(request.date)
@@ -321,9 +323,9 @@ class OfferService(
     @Transactional
     fun deleteSpecialDay(id: Long, seller: User) {
         val day = specialDayRepository.findById(id)
-            .orElseThrow { RuntimeException("Dia especial no encontrado") }
+            .orElseThrow { EntityNotFoundException("Dia especial", id) }
         if (day.seller?.id != seller.id) {
-            throw RuntimeException("No tienes permiso para eliminar este dia especial")
+            throw UnauthorizedActionException("No tienes permiso para eliminar este dia especial")
         }
         specialDayRepository.delete(day)
     }

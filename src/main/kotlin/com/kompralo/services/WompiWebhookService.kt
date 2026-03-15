@@ -1,5 +1,6 @@
 package com.kompralo.services
 
+import com.kompralo.exception.*
 import com.kompralo.model.PaymentMethod
 import com.kompralo.repository.OrderRepository
 import org.springframework.stereotype.Service
@@ -24,7 +25,7 @@ class WompiWebhookService(
         val status = transaction["status"] as? String ?: return
 
         val order = orderRepository.findByWompiTransactionId(transactionId)
-            ?: throw RuntimeException("Orden no encontrada para transaccion $transactionId")
+            ?: throw ResourceNotFoundException("Orden no encontrada para transaccion $transactionId")
 
         when (status) {
             "APPROVED" -> {

@@ -3,6 +3,7 @@ package com.kompralo.services
 import com.kompralo.model.NotificationType
 import com.kompralo.model.OfferStatus
 import com.kompralo.model.RelatedEntityType
+import com.kompralo.port.NotificationPort
 import com.kompralo.repository.OfferRepository
 import com.kompralo.repository.UserRepository
 import org.slf4j.LoggerFactory
@@ -15,7 +16,7 @@ import java.time.LocalDateTime
 class OfferScheduler(
     private val offerRepository: OfferRepository,
     private val pushNotificationService: PushNotificationService,
-    private val notificationService: NotificationService,
+    private val notificationPort: NotificationPort,
     private val userRepository: UserRepository,
     private val offerEmailService: OfferEmailService
 ) {
@@ -45,7 +46,7 @@ class OfferScheduler(
 
             if (offer.seller != null) {
                 try {
-                    notificationService.createAndSend(
+                    notificationPort.createAndSend(
                         userId = offer.seller!!.id!!,
                         type = NotificationType.PROMO_OFFER,
                         title = "Tu oferta se ha activado",
@@ -83,7 +84,7 @@ class OfferScheduler(
 
             if (offer.seller != null) {
                 try {
-                    notificationService.createAndSend(
+                    notificationPort.createAndSend(
                         userId = offer.seller!!.id!!,
                         type = NotificationType.PROMO_OFFER,
                         title = "Oferta expirada",

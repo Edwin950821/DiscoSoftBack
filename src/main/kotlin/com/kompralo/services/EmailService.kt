@@ -10,6 +10,7 @@ import jakarta.mail.internet.MimeMessage
 import jakarta.mail.internet.MimeMultipart
 import jakarta.mail.util.ByteArrayDataSource
 import org.apache.commons.codec.binary.Base64
+import com.kompralo.port.EmailPort
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
@@ -22,7 +23,7 @@ import java.util.Properties
 @Service
 class EmailService(
     private val gmail: Gmail
-) {
+) : EmailPort {
     private val logger = LoggerFactory.getLogger(EmailService::class.java)
     private val session: Session = Session.getDefaultInstance(Properties())
     private val copLocale = Locale("es", "CO")
@@ -88,15 +89,15 @@ class EmailService(
         }
     }
 
-    fun sendHtmlEmailWithAttachment(
+    override fun sendHtmlEmailWithAttachment(
         to: String,
         subject: String,
         htmlContent: String,
-        attachmentName: String? = null,
-        attachmentBytes: ByteArray? = null
+        attachmentName: String?,
+        attachmentBytes: ByteArray?
     ): Boolean = sendGmailMessage(buildMimeMessage(to, subject, htmlContent, attachmentName, attachmentBytes))
 
-    fun sendOrderConfirmationToBuyer(
+    override fun sendOrderConfirmationToBuyer(
         buyerEmail: String,
         buyerName: String,
         orderNumber: String,
@@ -184,7 +185,7 @@ class EmailService(
         )
     }
 
-    fun sendNewOrderNotificationToStore(
+    override fun sendNewOrderNotificationToStore(
         sellerEmail: String,
         sellerName: String,
         orderNumber: String,
@@ -269,7 +270,7 @@ class EmailService(
         )
     }
 
-    fun sendPasswordResetEmail(to: String, userName: String, resetToken: String, resetUrl: String): Boolean {
+    override fun sendPasswordResetEmail(to: String, userName: String, resetToken: String, resetUrl: String): Boolean {
         val safeName = escapeHtml(userName)
         val safeToken = escapeHtml(resetToken)
         val safeUrl = escapeHtml(resetUrl)
@@ -321,7 +322,7 @@ class EmailService(
         return sendHtmlEmailWithAttachment(to = to, subject = "Recuperacion de contrasena - Kompralo", htmlContent = html)
     }
 
-    fun sendSellerWelcomeEmail(to: String, businessName: String): Boolean {
+    override fun sendSellerWelcomeEmail(to: String, businessName: String): Boolean {
         val safeName = escapeHtml(businessName)
 
         val html = """
@@ -369,7 +370,7 @@ class EmailService(
         return sendHtmlEmailWithAttachment(to = to, subject = "Bienvenido a Kompralo!", htmlContent = html)
     }
 
-    fun sendProblemReport(
+    override fun sendProblemReport(
         userEmail: String,
         userName: String,
         tipo: String,
@@ -442,7 +443,7 @@ class EmailService(
         )
     }
 
-    fun sendSellerVerifiedEmail(to: String, businessName: String): Boolean {
+    override fun sendSellerVerifiedEmail(to: String, businessName: String): Boolean {
         val safeName = escapeHtml(businessName)
 
         val html = """

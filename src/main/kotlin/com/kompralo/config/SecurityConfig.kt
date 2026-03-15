@@ -7,6 +7,7 @@ import org.springframework.security.authentication.AuthenticationManager
 import org.springframework.security.authentication.AuthenticationProvider
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity
 import org.springframework.security.config.http.SessionCreationPolicy
@@ -14,9 +15,12 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.security.web.SecurityFilterChain
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter
+import org.springframework.security.web.csrf.CookieCsrfTokenRepository
+import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler
 
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity
 class SecurityConfig(
     private val jwtAuthFilter: JwtAuthenticationFilter,
     private val userDetailsService: CustomUserDetailsService
@@ -24,9 +28,41 @@ class SecurityConfig(
 
     @Bean
     fun securityFilterChain(http: HttpSecurity): SecurityFilterChain {
+        val csrfTokenRepository = CookieCsrfTokenRepository.withHttpOnlyFalse()
+        val csrfHandler = CsrfTokenRequestAttributeHandler()
+        csrfHandler.setCsrfRequestAttributeName(null)
+
         http
             .cors { }
-            .csrf { it.disable() }
+            .csrf { csrf ->
+                csrf.csrfTokenRepository(csrfTokenRepository)
+                csrf.csrfTokenRequestHandler(csrfHandler)
+                csrf.ignoringRequestMatchers(
+                    "/api/auth/register",
+                    "/api/auth/login",
+                    "/api/auth/login/2fa",
+                    "/api/auth/google",
+                    "/api/auth/google/register",
+                    "/api/auth/google/register-with-token",
+                    "/api/auth/logout",
+                    "/api/auth/password-reset/**",
+                    "/api/auth/health",
+                    "/api/sellers/register",
+                    "/api/public/**",
+                    "/api/webhooks/**",
+                    "/api/orders/**",
+                    "/api/disco/**"
+                )
+            }
+            .headers { headers ->
+                headers.frameOptions { it.deny() }
+                headers.contentTypeOptions { }
+                headers.httpStrictTransportSecurity { hsts ->
+                    hsts.includeSubDomains(true)
+                    hsts.maxAgeInSeconds(31536000)
+                }
+                headers.cacheControl { }
+            }
             .authorizeHttpRequests { auth ->
                 auth
                     .requestMatchers(
@@ -37,16 +73,15 @@ class SecurityConfig(
                         "/api/auth/google/register",
                         "/api/auth/google/register-with-token",
                         "/api/auth/logout",
-                        "/api/auth/me",
                         "/api/auth/password-reset/**",
                         "/api/auth/health",
                         "/api/sellers/register",
                         "/api/sellers",
                         "/api/sellers/{id}",
-                        "/api/users/**",
                         "/api/public/**",
                         "/api/webhooks/**",
-                        "/uploads/**"
+                        "/uploads/**",
+                        "/api/disco/**"
                     ).permitAll()
                     .anyRequest().authenticated()
             }

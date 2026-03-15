@@ -13,8 +13,8 @@ import com.kompralo.model.NotificationType
 import com.kompralo.model.PaymentMethod
 import com.kompralo.model.RelatedEntityType
 import com.kompralo.services.PdfService
+import com.kompralo.exception.*
 import org.springframework.http.HttpHeaders
-import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
@@ -36,49 +36,44 @@ class BuyerOrderController(
     fun confirmDelivery(
         @PathVariable id: Long,
         authentication: Authentication,
-    ): ResponseEntity<*> {
-        return try {
-            val buyer = userRepository.findByEmail(authentication.name)
-                .orElseThrow { RuntimeException("Usuario no encontrado") }
+    ): ResponseEntity<OrderResponse> {
+        val buyer = userRepository.findByEmail(authentication.name)
+            .orElseThrow { EntityNotFoundException("Usuario", authentication.name) }
 
-            val order = orderRepository.findById(id)
-                .orElseThrow { RuntimeException("Pedido no encontrado") }
+        val order = orderRepository.findById(id)
+            .orElseThrow { EntityNotFoundException("Pedido", id) }
 
-            if (order.buyer.id != buyer.id) {
-                throw RuntimeException("No autorizado")
-            }
-
-            if (order.status != OrderStatus.SHIPPED) {
-                throw RuntimeException("Solo se puede confirmar la recepcion de pedidos enviados (estado actual: ${order.status})")
-            }
-
-            order.updateStatus(OrderStatus.DELIVERED)
-
-            if (order.paymentMethod == PaymentMethod.CASH_ON_DELIVERY && order.paymentStatus != "PAID") {
-                order.markAsPaid(PaymentMethod.CASH_ON_DELIVERY)
-            }
-
-            val saved = orderRepository.save(order)
-
-            val paymentNote = if (order.paymentMethod == PaymentMethod.CASH_ON_DELIVERY)
-                " Pago contra entrega confirmado." else ""
-
-            notificationService.createAndSend(
-                userId = order.seller.id!!,
-                type = NotificationType.ORDER_DELIVERED,
-                title = "Pedido entregado",
-                message = "El comprador confirmo la recepcion del pedido ${order.orderNumber}.$paymentNote",
-                priority = "medium",
-                actionUrl = "/admin/orders",
-                relatedEntityId = saved.id,
-                relatedEntityType = RelatedEntityType.ORDER
-            )
-
-            ResponseEntity.ok(saved.toResponse())
-        } catch (e: RuntimeException) {
-            ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(mapOf("message" to (e.message ?: "Error al confirmar recepcion")))
+        if (order.buyer.id != buyer.id) {
+            throw UnauthorizedActionException("No autorizado")
         }
+
+        if (order.status != OrderStatus.SHIPPED) {
+            throw BusinessRuleViolationException("Solo se puede confirmar la recepcion de pedidos enviados (estado actual: ${order.status})")
+        }
+
+        order.updateStatus(OrderStatus.DELIVERED)
+
+        if (order.paymentMethod == PaymentMethod.CASH_ON_DELIVERY && order.paymentStatus != "PAID") {
+            order.markAsPaid(PaymentMethod.CASH_ON_DELIVERY)
+        }
+
+        val saved = orderRepository.save(order)
+
+        val paymentNote = if (order.paymentMethod == PaymentMethod.CASH_ON_DELIVERY)
+            " Pago contra entrega confirmado." else ""
+
+        notificationService.createAndSend(
+            userId = order.seller.id!!,
+            type = NotificationType.ORDER_DELIVERED,
+            title = "Pedido entregado",
+            message = "El comprador confirmo la recepcion del pedido ${order.orderNumber}.$paymentNote",
+            priority = "medium",
+            actionUrl = "/admin/orders",
+            relatedEntityId = saved.id,
+            relatedEntityType = RelatedEntityType.ORDER
+        )
+
+        return ResponseEntity.ok(saved.toResponse())
     }
 
     @PatchMapping("/{id}/cancel")
@@ -87,108 +82,87 @@ class BuyerOrderController(
         @PathVariable id: Long,
         @RequestBody body: Map<String, String>,
         authentication: Authentication,
-    ): ResponseEntity<*> {
-        return try {
-            val buyer = userRepository.findByEmail(authentication.name)
-                .orElseThrow { RuntimeException("Usuario no encontrado") }
+    ): ResponseEntity<OrderResponse> {
+        val buyer = userRepository.findByEmail(authentication.name)
+            .orElseThrow { EntityNotFoundException("Usuario", authentication.name) }
 
-            val order = orderRepository.findById(id)
-                .orElseThrow { RuntimeException("Pedido no encontrado") }
+        val order = orderRepository.findById(id)
+            .orElseThrow { EntityNotFoundException("Pedido", id) }
 
-            if (order.buyer.id != buyer.id) {
-                throw RuntimeException("No autorizado para cancelar este pedido")
-            }
-
-            if (!order.canBeCancelled()) {
-                throw RuntimeException("Este pedido no puede ser cancelado (estado: ${order.status})")
-            }
-
-            // Restore stock for each item
-            for (item in order.items) {
-                val product = productRepository.findById(item.productId).orElse(null)
-                if (product != null) {
-                    product.stock += item.quantity
-                    product.sales = (product.sales - item.quantity).coerceAtLeast(0)
-                    product.updateStockStatus()
-                    productRepository.save(product)
-                }
-            }
-
-            order.updateStatus(OrderStatus.CANCELLED)
-            order.cancellationReason = body["reason"]
-            val saved = orderRepository.save(order)
-
-            ResponseEntity.ok(saved.toResponse())
-        } catch (e: RuntimeException) {
-            ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(mapOf("message" to (e.message ?: "Error al cancelar pedido")))
+        if (order.buyer.id != buyer.id) {
+            throw UnauthorizedActionException("No autorizado para cancelar este pedido")
         }
+
+        if (!order.canBeCancelled()) {
+            throw BusinessRuleViolationException("Este pedido no puede ser cancelado (estado: ${order.status})")
+        }
+
+        for (item in order.items) {
+            val product = productRepository.findById(item.productId).orElse(null)
+            if (product != null) {
+                product.stock += item.quantity
+                product.sales = (product.sales - item.quantity).coerceAtLeast(0)
+                product.updateStockStatus()
+                productRepository.save(product)
+            }
+        }
+
+        order.updateStatus(OrderStatus.CANCELLED)
+        order.cancellationReason = body["reason"]
+        val saved = orderRepository.save(order)
+
+        return ResponseEntity.ok(saved.toResponse())
     }
 
     @GetMapping
-    fun getMyOrders(authentication: Authentication): ResponseEntity<*> {
-        return try {
-            val buyer = userRepository.findByEmail(authentication.name)
-                .orElseThrow { RuntimeException("Usuario no encontrado") }
+    fun getMyOrders(authentication: Authentication): ResponseEntity<List<OrderResponse>> {
+        val buyer = userRepository.findByEmail(authentication.name)
+            .orElseThrow { EntityNotFoundException("Usuario", authentication.name) }
 
-            val orders = orderRepository.findByBuyerOrderByCreatedAtDesc(buyer)
-            ResponseEntity.ok(orders.map { it.toResponse() })
-        } catch (e: Exception) {
-            ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(mapOf("message" to (e.message ?: "Error al obtener pedidos")))
-        }
+        val orders = orderRepository.findByBuyerOrderByCreatedAtDesc(buyer)
+        return ResponseEntity.ok(orders.map { it.toResponse() })
     }
 
     @GetMapping("/{id}")
     fun getMyOrder(
         @PathVariable id: Long,
         authentication: Authentication,
-    ): ResponseEntity<*> {
-        return try {
-            val buyer = userRepository.findByEmail(authentication.name)
-                .orElseThrow { RuntimeException("Usuario no encontrado") }
+    ): ResponseEntity<OrderResponse> {
+        val buyer = userRepository.findByEmail(authentication.name)
+            .orElseThrow { EntityNotFoundException("Usuario", authentication.name) }
 
-            val order = orderRepository.findById(id)
-                .orElseThrow { RuntimeException("Pedido no encontrado") }
+        val order = orderRepository.findById(id)
+            .orElseThrow { EntityNotFoundException("Pedido", id) }
 
-            if (order.buyer.id != buyer.id) {
-                throw RuntimeException("No autorizado para ver este pedido")
-            }
-
-            ResponseEntity.ok(order.toResponse())
-        } catch (e: RuntimeException) {
-            ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(mapOf("message" to (e.message ?: "Pedido no encontrado")))
+        if (order.buyer.id != buyer.id) {
+            throw UnauthorizedActionException("No autorizado para ver este pedido")
         }
+
+        return ResponseEntity.ok(order.toResponse())
     }
 
     @GetMapping("/{orderNumber}/receipt")
     fun downloadReceipt(
         @PathVariable orderNumber: String,
         authentication: Authentication,
-    ): ResponseEntity<*> {
-        return try {
-            val buyer = userRepository.findByEmail(authentication.name)
-                .orElseThrow { RuntimeException("Usuario no encontrado") }
+    ): ResponseEntity<ByteArray> {
+        val buyer = userRepository.findByEmail(authentication.name)
+            .orElseThrow { EntityNotFoundException("Usuario", authentication.name) }
 
-            val order = orderRepository.findByOrderNumberWithDetails(orderNumber)
-                ?: throw RuntimeException("Pedido no encontrado")
+        val order = orderRepository.findByOrderNumberWithDetails(orderNumber)
+            ?: throw ResourceNotFoundException("Pedido no encontrado")
 
-            if (order.buyer.id != buyer.id) {
-                throw RuntimeException("No autorizado para descargar este comprobante")
-            }
-
-            val pdfBytes = pdfService.generateReceipt(order)
-
-            ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=Comprobante_${orderNumber}.pdf")
-                .contentType(MediaType.APPLICATION_PDF)
-                .contentLength(pdfBytes.size.toLong())
-                .body(pdfBytes)
-        } catch (e: RuntimeException) {
-            ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(mapOf("message" to (e.message ?: "Error al generar comprobante")))
+        if (order.buyer.id != buyer.id) {
+            throw UnauthorizedActionException("No autorizado para descargar este comprobante")
         }
+
+        val pdfBytes = pdfService.generateReceipt(order)
+
+        return ResponseEntity.ok()
+            .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=Comprobante_${orderNumber}.pdf")
+            .contentType(MediaType.APPLICATION_PDF)
+            .contentLength(pdfBytes.size.toLong())
+            .body(pdfBytes)
     }
 
     private fun Order.toResponse(): OrderResponse {

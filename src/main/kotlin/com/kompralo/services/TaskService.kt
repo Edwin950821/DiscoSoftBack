@@ -1,24 +1,25 @@
 package com.kompralo.services
 
+import com.kompralo.exception.*
 import com.kompralo.dto.*
+import com.kompralo.mapper.TaskMapper
 import com.kompralo.model.*
+import com.kompralo.port.NotificationPort
 import com.kompralo.repository.*
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.LocalDateTime
-import java.time.LocalTime
 
 @Service
 class TaskService(
     private val taskRepository: TaskRepository,
-    private val taskSubtaskRepository: TaskSubtaskRepository,
     private val taskCommentRepository: TaskCommentRepository,
     private val taskLabelRepository: TaskLabelRepository,
     private val taskHistoryRepository: TaskHistoryRepository,
     private val userRepository: UserRepository,
-    private val notificationService: NotificationService
+    private val notificationPort: NotificationPort,
+    private val taskMapper: TaskMapper
 ) {
-
 
     fun getTasks(
         user: User,
@@ -37,18 +38,18 @@ class TaskService(
         endDate?.let { ed -> tasks = tasks.filter { it.dueDate != null && it.dueDate!! <= ed } }
 
         return TaskListResponse(
-            tasks = tasks.map { it.toResponse() },
+            tasks = tasks.map { taskMapper.toResponse(it) },
             total = tasks.size
         )
     }
 
     fun getTaskById(id: Long, user: User): TaskResponse {
         val task = taskRepository.findById(id)
-            .orElseThrow { RuntimeException("Tarea no encontrada") }
+            .orElseThrow { EntityNotFoundException("Tarea", id) }
         if (task.createdBy.id != user.id && task.assignedTo?.id != user.id) {
-            throw RuntimeException("No tienes acceso a esta tarea")
+            throw UnauthorizedActionException("No tienes acceso a esta tarea")
         }
-        return task.toResponse()
+        return taskMapper.toResponse(task)
     }
 
     @Transactional
@@ -84,7 +85,7 @@ class TaskService(
         addHistory(saved, user, TaskHistoryAction.CREATED, null, null, "Tarea creada")
 
         if (saved.assignedTo != null && saved.assignedTo!!.id != user.id) {
-            notificationService.createAndSend(
+            notificationPort.createAndSend(
                 userId = saved.assignedTo!!.id!!,
                 type = NotificationType.TASK_ASSIGNED,
                 title = "Nueva tarea asignada",
@@ -96,16 +97,16 @@ class TaskService(
             )
         }
 
-        return saved.toResponse()
+        return taskMapper.toResponse(saved)
     }
 
     @Transactional
     fun updateTask(id: Long, request: UpdateTaskRequest, user: User): TaskResponse {
         val task = taskRepository.findById(id)
-            .orElseThrow { RuntimeException("Tarea no encontrada") }
+            .orElseThrow { EntityNotFoundException("Tarea", id) }
 
         if (task.createdBy.id != user.id) {
-            throw RuntimeException("No tienes permiso para editar esta tarea")
+            throw UnauthorizedActionException("No tienes permiso para editar esta tarea")
         }
 
         request.title?.let {
@@ -126,21 +127,7 @@ class TaskService(
                 } else {
                     task.completedAt = null
                 }
-                val targets = mutableSetOf<Long>()
-                if (task.createdBy.id != user.id) targets.add(task.createdBy.id!!)
-                if (task.assignedTo != null && task.assignedTo!!.id != user.id) targets.add(task.assignedTo!!.id!!)
-                targets.forEach { targetId ->
-                    notificationService.createAndSend(
-                        userId = targetId,
-                        type = NotificationType.TASK_STATUS_CHANGED,
-                        title = "Estado de tarea cambiado",
-                        message = "'${task.title}' cambio de $oldStatus a ${it.name}.",
-                        priority = "medium",
-                        actionUrl = "/admin/tasks",
-                        relatedEntityId = task.id,
-                        relatedEntityType = RelatedEntityType.TASK
-                    )
-                }
+                notifyStatusChange(task, user, oldStatus, it.name)
             }
         }
         request.priority?.let {
@@ -159,7 +146,7 @@ class TaskService(
                 addHistory(task, user, TaskHistoryAction.ASSIGNED, "assignedTo", task.assignedTo?.name, newAssigned.name)
                 task.assignedTo = newAssigned
                 if (newAssigned.id != user.id) {
-                    notificationService.createAndSend(
+                    notificationPort.createAndSend(
                         userId = newAssigned.id!!,
                         type = NotificationType.TASK_ASSIGNED,
                         title = "Tarea asignada",
@@ -182,13 +169,13 @@ class TaskService(
         request.recurringPattern?.let { task.recurringPattern = it }
 
         task.updatedAt = LocalDateTime.now()
-        return taskRepository.save(task).toResponse()
+        return taskMapper.toResponse(taskRepository.save(task))
     }
 
     @Transactional
     fun updateTaskStatus(id: Long, status: TaskStatus, user: User): TaskResponse {
         val task = taskRepository.findById(id)
-            .orElseThrow { RuntimeException("Tarea no encontrada") }
+            .orElseThrow { EntityNotFoundException("Tarea", id) }
 
         val oldStatus = task.status
         task.status = status
@@ -201,89 +188,31 @@ class TaskService(
         }
 
         addHistory(task, user, TaskHistoryAction.STATUS_CHANGED, "status", oldStatus.name, status.name)
+        notifyStatusChange(task, user, oldStatus.name, status.name)
 
-        val targets = mutableSetOf<Long>()
-        if (task.createdBy.id != user.id) targets.add(task.createdBy.id!!)
-        if (task.assignedTo != null && task.assignedTo!!.id != user.id) targets.add(task.assignedTo!!.id!!)
-        targets.forEach { targetId ->
-            notificationService.createAndSend(
-                userId = targetId,
-                type = NotificationType.TASK_STATUS_CHANGED,
-                title = "Estado de tarea cambiado",
-                message = "'${task.title}' cambio de ${oldStatus.name} a ${status.name}.",
-                priority = "medium",
-                actionUrl = "/admin/tasks",
-                relatedEntityId = task.id,
-                relatedEntityType = RelatedEntityType.TASK
-            )
-        }
-
-        return taskRepository.save(task).toResponse()
+        return taskMapper.toResponse(taskRepository.save(task))
     }
 
     @Transactional
     fun deleteTask(id: Long, user: User) {
         val task = taskRepository.findById(id)
-            .orElseThrow { RuntimeException("Tarea no encontrada") }
+            .orElseThrow { EntityNotFoundException("Tarea", id) }
         if (task.createdBy.id != user.id) {
-            throw RuntimeException("No tienes permiso para eliminar esta tarea")
+            throw UnauthorizedActionException("No tienes permiso para eliminar esta tarea")
         }
         taskRepository.delete(task)
     }
 
-
-    @Transactional
-    fun addSubtask(taskId: Long, request: CreateSubtaskRequest, user: User): SubtaskResponse {
-        val task = taskRepository.findById(taskId)
-            .orElseThrow { RuntimeException("Tarea no encontrada") }
-
-        val maxOrder = task.subtasks.maxOfOrNull { it.sortOrder } ?: -1
-        val subtask = TaskSubtask(
-            task = task,
-            title = request.title,
-            sortOrder = maxOrder + 1
-        )
-
-        val saved = taskSubtaskRepository.save(subtask)
-        addHistory(task, user, TaskHistoryAction.SUBTASK_ADDED, null, null, request.title)
-        return saved.toResponse()
-    }
-
-    @Transactional
-    fun updateSubtask(taskId: Long, subtaskId: Long, request: UpdateSubtaskRequest, user: User): SubtaskResponse {
-        val subtask = taskSubtaskRepository.findById(subtaskId)
-            .orElseThrow { RuntimeException("Subtarea no encontrada") }
-
-        request.title?.let { subtask.title = it }
-        request.completed?.let {
-            if (it != subtask.completed) {
-                subtask.completed = it
-                if (it) {
-                    addHistory(subtask.task, user, TaskHistoryAction.SUBTASK_COMPLETED, null, null, subtask.title)
-                }
-            }
-        }
-        request.sortOrder?.let { subtask.sortOrder = it }
-
-        return taskSubtaskRepository.save(subtask).toResponse()
-    }
-
-    @Transactional
-    fun deleteSubtask(taskId: Long, subtaskId: Long) {
-        taskSubtaskRepository.deleteById(subtaskId)
-    }
-
-
     fun getComments(taskId: Long): List<CommentResponse> {
         val task = taskRepository.findById(taskId)
-            .orElseThrow { RuntimeException("Tarea no encontrada") }
-        return taskCommentRepository.findByTaskOrderByCreatedAtDesc(task).map { it.toResponse() }
+            .orElseThrow { EntityNotFoundException("Tarea", taskId) }
+        return taskCommentRepository.findByTaskOrderByCreatedAtDesc(task).map { taskMapper.toResponse(it) }
     }
 
     @Transactional
     fun addComment(taskId: Long, request: CreateCommentRequest, user: User): CommentResponse {
         val task = taskRepository.findById(taskId)
-            .orElseThrow { RuntimeException("Tarea no encontrada") }
+            .orElseThrow { EntityNotFoundException("Tarea", taskId) }
 
         val comment = TaskComment(
             task = task,
@@ -298,7 +227,7 @@ class TaskService(
         if (task.createdBy.id != user.id) targets.add(task.createdBy.id!!)
         if (task.assignedTo != null && task.assignedTo!!.id != user.id) targets.add(task.assignedTo!!.id!!)
         targets.forEach { targetId ->
-            notificationService.createAndSend(
+            notificationPort.createAndSend(
                 userId = targetId,
                 type = NotificationType.TASK_COMMENTED,
                 title = "Nuevo comentario",
@@ -310,7 +239,7 @@ class TaskService(
             )
         }
 
-        return saved.toResponse()
+        return taskMapper.toResponse(saved)
     }
 
     @Transactional
@@ -318,70 +247,28 @@ class TaskService(
         taskCommentRepository.deleteById(commentId)
     }
 
-
-
     fun getHistory(taskId: Long): List<HistoryResponse> {
         val task = taskRepository.findById(taskId)
-            .orElseThrow { RuntimeException("Tarea no encontrada") }
-        return taskHistoryRepository.findByTaskOrderByCreatedAtDesc(task).map { it.toResponse() }
+            .orElseThrow { EntityNotFoundException("Tarea", taskId) }
+        return taskHistoryRepository.findByTaskOrderByCreatedAtDesc(task).map { taskMapper.toResponse(it) }
     }
 
-
-
-    fun getLabels(user: User): List<LabelResponse> {
-        return taskLabelRepository.findByCreatedBy(user).map { it.toResponse() }
-    }
-
-    @Transactional
-    fun createLabel(request: CreateLabelRequest, user: User): LabelResponse {
-        val label = TaskLabel(
-            name = request.name,
-            color = request.color,
-            createdBy = user
-        )
-        return taskLabelRepository.save(label).toResponse()
-    }
-
-    @Transactional
-    fun deleteLabel(id: Long) {
-        taskLabelRepository.deleteById(id)
-    }
-
-
-    fun getMetrics(user: User): TaskMetricsResponse {
-        val now = LocalDateTime.now()
-        val startOfDay = now.with(LocalTime.MIN)
-        val endOfDay = now.with(LocalTime.MAX)
-
-        val allTasks = taskRepository.findByCreatedByOrderByCreatedAtDesc(user)
-        val total = allTasks.size.toLong()
-        val todo = allTasks.count { it.status == TaskStatus.TODO }.toLong()
-        val inProgress = allTasks.count { it.status == TaskStatus.IN_PROGRESS }.toLong()
-        val done = allTasks.count { it.status == TaskStatus.DONE }.toLong()
-        val overdue = allTasks.count {
-            it.dueDate != null && it.dueDate!!.isBefore(now) && it.status != TaskStatus.DONE
-        }.toLong()
-
-        val completedToday = allTasks.count {
-            it.status == TaskStatus.DONE &&
-            it.completedAt != null &&
-            it.completedAt!!.isAfter(startOfDay) &&
-            it.completedAt!!.isBefore(endOfDay)
-        }.toLong()
-
-        val highPriority = allTasks.count {
-            it.priority == TaskPriority.HIGH || it.priority == TaskPriority.URGENT
-        }.toLong()
-
-        return TaskMetricsResponse(
-            total = total,
-            todo = todo,
-            inProgress = inProgress,
-            done = done,
-            overdue = overdue,
-            completedToday = completedToday,
-            highPriority = highPriority
-        )
+    private fun notifyStatusChange(task: Task, user: User, oldStatus: String, newStatus: String) {
+        val targets = mutableSetOf<Long>()
+        if (task.createdBy.id != user.id) targets.add(task.createdBy.id!!)
+        if (task.assignedTo != null && task.assignedTo!!.id != user.id) targets.add(task.assignedTo!!.id!!)
+        targets.forEach { targetId ->
+            notificationPort.createAndSend(
+                userId = targetId,
+                type = NotificationType.TASK_STATUS_CHANGED,
+                title = "Estado de tarea cambiado",
+                message = "'${task.title}' cambio de $oldStatus a $newStatus.",
+                priority = "medium",
+                actionUrl = "/admin/tasks",
+                relatedEntityId = task.id,
+                relatedEntityType = RelatedEntityType.TASK
+            )
+        }
     }
 
     private fun addHistory(
@@ -392,80 +279,8 @@ class TaskService(
         oldValue: String?,
         newValue: String?
     ) {
-        val history = TaskHistory(
-            task = task,
-            user = user,
-            action = action,
-            field = field,
-            oldValue = oldValue,
-            newValue = newValue
-        )
-        taskHistoryRepository.save(history)
-    }
-
-    private fun Task.toResponse(): TaskResponse {
-        val completedSubtasks = subtasks.count { it.completed }
-        val totalSubtasks = subtasks.size
-        return TaskResponse(
-            id = id!!,
-            title = title,
-            description = description,
-            status = status,
-            priority = priority,
-            dueDate = dueDate,
-            startDate = startDate,
-            endDate = endDate,
-            category = category,
-            assignedTo = assignedTo?.let { TaskUserResponse(it.id!!, it.name, it.email) },
-            createdBy = TaskUserResponse(createdBy.id!!, createdBy.name, createdBy.email),
-            labels = labels.map { it.toResponse() },
-            subtasks = subtasks.map { it.toResponse() },
-            subtaskProgress = SubtaskProgressResponse(
-                total = totalSubtasks,
-                completed = completedSubtasks,
-                percentage = if (totalSubtasks > 0) (completedSubtasks * 100 / totalSubtasks) else 0
-            ),
-            commentCount = comments.size,
-            relatedOrderId = relatedOrderId,
-            relatedProductId = relatedProductId,
-            relatedCustomerId = relatedCustomerId,
-            isRecurring = isRecurring,
-            recurringPattern = recurringPattern,
-            completedAt = completedAt,
-            createdAt = createdAt,
-            updatedAt = updatedAt
+        taskHistoryRepository.save(
+            TaskHistory(task = task, user = user, action = action, field = field, oldValue = oldValue, newValue = newValue)
         )
     }
-
-    private fun TaskSubtask.toResponse() = SubtaskResponse(
-        id = id!!,
-        title = title,
-        completed = completed,
-        sortOrder = sortOrder,
-        createdAt = createdAt
-    )
-
-    private fun TaskComment.toResponse() = CommentResponse(
-        id = id!!,
-        author = TaskUserResponse(author.id!!, author.name, author.email),
-        content = content,
-        createdAt = createdAt,
-        updatedAt = updatedAt
-    )
-
-    private fun TaskLabel.toResponse() = LabelResponse(
-        id = id!!,
-        name = name,
-        color = color
-    )
-
-    private fun TaskHistory.toResponse() = HistoryResponse(
-        id = id!!,
-        user = TaskUserResponse(user.id!!, user.name, user.email),
-        action = action,
-        field = field,
-        oldValue = oldValue,
-        newValue = newValue,
-        createdAt = createdAt
-    )
 }

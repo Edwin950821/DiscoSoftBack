@@ -1,11 +1,13 @@
 package com.kompralo.services
 
+import com.kompralo.exception.*
 import com.kompralo.dto.CreateReviewRequest
 import com.kompralo.dto.ReviewResponse
 import com.kompralo.model.*
 import com.kompralo.repository.OrderRepository
 import com.kompralo.repository.ProductRepository
 import com.kompralo.repository.ReviewRepository
+import com.kompralo.port.NotificationPort
 import com.kompralo.repository.UserRepository
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -16,23 +18,23 @@ class ReviewService(
     private val productRepository: ProductRepository,
     private val userRepository: UserRepository,
     private val orderRepository: OrderRepository,
-    private val notificationService: NotificationService,
+    private val notificationPort: NotificationPort,
 ) {
 
     @Transactional
     fun createReview(buyerEmail: String, request: CreateReviewRequest): ReviewResponse {
         if (request.rating < 1 || request.rating > 5) {
-            throw RuntimeException("La calificacion debe ser entre 1 y 5")
+            throw ValidationException("La calificacion debe ser entre 1 y 5")
         }
 
         val buyer = userRepository.findByEmail(buyerEmail)
-            .orElseThrow { RuntimeException("Usuario no encontrado") }
+            .orElseThrow { EntityNotFoundException("Usuario", buyerEmail) }
 
         val product = productRepository.findById(request.productId)
-            .orElseThrow { RuntimeException("Producto no encontrado") }
+            .orElseThrow { EntityNotFoundException("Producto", request.productId) }
 
         if (reviewRepository.existsByProductIdAndBuyerId(request.productId, buyer.id!!)) {
-            throw RuntimeException("Ya escribiste una resena para este producto")
+            throw ResourceAlreadyExistsException("Ya escribiste una resena para este producto")
         }
 
         val buyerOrders = orderRepository.findByBuyerOrderByCreatedAtDesc(buyer)
@@ -41,7 +43,7 @@ class ReviewService(
                 order.items.any { it.productId == request.productId }
         }
         if (!hasDeliveredOrder) {
-            throw RuntimeException("Solo puedes resenar productos que hayas recibido")
+            throw BusinessRuleViolationException("Solo puedes resenar productos que hayas recibido")
         }
 
         val review = Review(
@@ -56,7 +58,7 @@ class ReviewService(
         recalculateRating(product)
 
         try {
-            notificationService.createAndSend(
+            notificationPort.createAndSend(
                 userId = product.seller.id!!,
                 type = NotificationType.NEW_REVIEW,
                 title = "Nueva resena",
@@ -78,13 +80,13 @@ class ReviewService(
     @Transactional
     fun deleteReview(reviewId: Long, buyerEmail: String) {
         val buyer = userRepository.findByEmail(buyerEmail)
-            .orElseThrow { RuntimeException("Usuario no encontrado") }
+            .orElseThrow { EntityNotFoundException("Usuario", buyerEmail) }
 
         val review = reviewRepository.findById(reviewId)
-            .orElseThrow { RuntimeException("Resena no encontrada") }
+            .orElseThrow { EntityNotFoundException("Resena", reviewId) }
 
         if (review.buyer.id != buyer.id) {
-            throw RuntimeException("No autorizado para eliminar esta resena")
+            throw UnauthorizedActionException("No autorizado para eliminar esta resena")
         }
 
         val product = review.product

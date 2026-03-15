@@ -26,7 +26,7 @@ data class UserDTO(
                 email = user.email,
                 name = user.name,
                 role = user.role,
-                isActive = user.isActive,
+                isActive = user.isUserActive(),
                 createdAt = user.createdAt,
                 updatedAt = user.updatedAt
             )
@@ -52,7 +52,10 @@ data class CreateUserRequest(
 
     val role: Role = Role.USER,
 
-    val isActive: Boolean = true
+    val isActive: Boolean = true,
+
+    @field:Size(min = 2, max = 50, message = "El username debe tener entre 2 y 50 caracteres")
+    val username: String? = null
 )
 
 /**

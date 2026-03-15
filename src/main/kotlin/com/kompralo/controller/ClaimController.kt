@@ -18,20 +18,12 @@ class ClaimController(
         @RequestBody request: CreateClaimRequest,
         authentication: Authentication
     ): ResponseEntity<*> {
-        return try {
-            ResponseEntity.status(HttpStatus.CREATED).body(claimService.createClaim(authentication.name, request))
-        } catch (e: RuntimeException) {
-            ResponseEntity.badRequest().body(mapOf("message" to (e.message ?: "Error")))
-        }
+        return ResponseEntity.status(HttpStatus.CREATED).body(claimService.createClaim(authentication.name, request))
     }
 
     @GetMapping("/api/buyer/claims")
     fun getMyClaims(authentication: Authentication): ResponseEntity<*> {
-        return try {
-            ResponseEntity.ok(claimService.getMyClaims(authentication.name))
-        } catch (e: RuntimeException) {
-            ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(mapOf("message" to (e.message ?: "Error")))
-        }
+        return ResponseEntity.ok(claimService.getMyClaims(authentication.name))
     }
 
     @GetMapping("/api/claims")
@@ -39,29 +31,17 @@ class ClaimController(
         @RequestParam(required = false) status: ClaimStatus?,
         authentication: Authentication
     ): ResponseEntity<*> {
-        return try {
-            ResponseEntity.ok(claimService.getClaims(authentication.name, status))
-        } catch (e: RuntimeException) {
-            ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(mapOf("message" to (e.message ?: "Error")))
-        }
+        return ResponseEntity.ok(claimService.getClaims(authentication.name, status))
     }
 
     @GetMapping("/api/claims/{id}")
     fun getClaim(@PathVariable id: Long): ResponseEntity<*> {
-        return try {
-            ResponseEntity.ok(claimService.getClaim(id))
-        } catch (e: RuntimeException) {
-            ResponseEntity.status(HttpStatus.NOT_FOUND).body(mapOf("message" to (e.message ?: "Error")))
-        }
+        return ResponseEntity.ok(claimService.getClaim(id))
     }
 
     @GetMapping("/api/claims/stats")
     fun getClaimStats(authentication: Authentication): ResponseEntity<*> {
-        return try {
-            ResponseEntity.ok(claimService.getClaimStats(authentication.name))
-        } catch (e: RuntimeException) {
-            ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(mapOf("message" to (e.message ?: "Error")))
-        }
+        return ResponseEntity.ok(claimService.getClaimStats(authentication.name))
     }
 
     @PatchMapping("/api/claims/{id}/extend")
@@ -69,11 +49,7 @@ class ClaimController(
         @PathVariable id: Long,
         authentication: Authentication
     ): ResponseEntity<*> {
-        return try {
-            ResponseEntity.ok(claimService.extendClaim(id, authentication.name))
-        } catch (e: RuntimeException) {
-            ResponseEntity.badRequest().body(mapOf("message" to (e.message ?: "Error")))
-        }
+        return ResponseEntity.ok(claimService.extendClaim(id, authentication.name))
     }
 
     @PatchMapping("/api/claims/{id}/refund")
@@ -81,11 +57,7 @@ class ClaimController(
         @PathVariable id: Long,
         authentication: Authentication
     ): ResponseEntity<*> {
-        return try {
-            ResponseEntity.ok(claimService.requestRefund(id, authentication.name))
-        } catch (e: RuntimeException) {
-            ResponseEntity.badRequest().body(mapOf("message" to (e.message ?: "Error")))
-        }
+        return ResponseEntity.ok(claimService.requestRefund(id, authentication.name))
     }
 
     @PatchMapping("/api/claims/{id}/store-respond")
@@ -94,11 +66,7 @@ class ClaimController(
         @RequestBody request: StoreRespondClaimRequest,
         authentication: Authentication
     ): ResponseEntity<*> {
-        return try {
-            ResponseEntity.ok(claimService.storeRespond(id, authentication.name, request))
-        } catch (e: RuntimeException) {
-            ResponseEntity.badRequest().body(mapOf("message" to (e.message ?: "Error")))
-        }
+        return ResponseEntity.ok(claimService.storeRespond(id, authentication.name, request))
     }
 
     @PatchMapping("/api/claims/{id}/admin-resolve")
@@ -106,10 +74,6 @@ class ClaimController(
         @PathVariable id: Long,
         @RequestBody request: AdminResolveClaimRequest
     ): ResponseEntity<*> {
-        return try {
-            ResponseEntity.ok(claimService.adminResolve(id, request))
-        } catch (e: RuntimeException) {
-            ResponseEntity.badRequest().body(mapOf("message" to (e.message ?: "Error")))
-        }
+        return ResponseEntity.ok(claimService.adminResolve(id, request))
     }
 }

@@ -2,16 +2,22 @@ package com.kompralo.dto
 
 import com.kompralo.model.TaskPriority
 import com.kompralo.model.TaskStatus
+import jakarta.validation.constraints.NotBlank
+import jakarta.validation.constraints.Size
 import java.time.LocalDateTime
 
 data class CreateTaskRequest(
+    @field:NotBlank(message = "El titulo es requerido")
+    @field:Size(max = 255, message = "El titulo no puede exceder 255 caracteres")
     val title: String,
+    @field:Size(max = 5000, message = "La descripcion no puede exceder 5000 caracteres")
     val description: String? = null,
     val status: TaskStatus = TaskStatus.TODO,
     val priority: TaskPriority = TaskPriority.MEDIUM,
     val dueDate: LocalDateTime? = null,
     val startDate: LocalDateTime? = null,
     val endDate: LocalDateTime? = null,
+    @field:Size(max = 100, message = "La categoria no puede exceder 100 caracteres")
     val category: String? = null,
     val assignedToId: Long? = null,
     val labelIds: List<Long> = emptyList(),
@@ -19,17 +25,21 @@ data class CreateTaskRequest(
     val relatedProductId: Long? = null,
     val relatedCustomerId: Long? = null,
     val isRecurring: Boolean = false,
+    @field:Size(max = 50, message = "El patron de recurrencia no puede exceder 50 caracteres")
     val recurringPattern: String? = null
 )
 
 data class UpdateTaskRequest(
+    @field:Size(max = 255, message = "El titulo no puede exceder 255 caracteres")
     val title: String? = null,
+    @field:Size(max = 5000, message = "La descripcion no puede exceder 5000 caracteres")
     val description: String? = null,
     val status: TaskStatus? = null,
     val priority: TaskPriority? = null,
     val dueDate: LocalDateTime? = null,
     val startDate: LocalDateTime? = null,
     val endDate: LocalDateTime? = null,
+    @field:Size(max = 100, message = "La categoria no puede exceder 100 caracteres")
     val category: String? = null,
     val assignedToId: Long? = null,
     val labelIds: List<Long>? = null,
@@ -37,6 +47,7 @@ data class UpdateTaskRequest(
     val relatedProductId: Long? = null,
     val relatedCustomerId: Long? = null,
     val isRecurring: Boolean? = null,
+    @field:Size(max = 50, message = "El patron de recurrencia no puede exceder 50 caracteres")
     val recurringPattern: String? = null
 )
 

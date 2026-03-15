@@ -1,5 +1,6 @@
 package com.kompralo.services
 
+import com.kompralo.exception.*
 import com.kompralo.dto.*
 import com.kompralo.model.Supplier
 import com.kompralo.repository.StockBatchRepository
@@ -22,14 +23,14 @@ class SupplierService(
     @Transactional
     fun createSupplier(email: String, request: CreateSupplierRequest): SupplierResponse {
         val seller = userRepository.findByEmail(email)
-            .orElseThrow { RuntimeException("Usuario no encontrado") }
+            .orElseThrow { EntityNotFoundException("Usuario", email) }
 
         if (request.name.isBlank()) {
-            throw RuntimeException("El nombre del proveedor es obligatorio")
+            throw ValidationException("El nombre del proveedor es obligatorio")
         }
 
         if (!request.nit.isNullOrBlank() && supplierRepository.existsBySellerIdAndNit(seller.id!!, request.nit)) {
-            throw RuntimeException("Ya existe un proveedor con ese NIT")
+            throw ResourceAlreadyExistsException("Ya existe un proveedor con ese NIT")
         }
 
         val supplier = supplierRepository.save(
@@ -52,19 +53,19 @@ class SupplierService(
     @Transactional
     fun updateSupplier(email: String, supplierId: Long, request: UpdateSupplierRequest): SupplierResponse {
         val seller = userRepository.findByEmail(email)
-            .orElseThrow { RuntimeException("Usuario no encontrado") }
+            .orElseThrow { EntityNotFoundException("Usuario", email) }
 
         val supplier = supplierRepository.findById(supplierId)
-            .orElseThrow { RuntimeException("Proveedor no encontrado") }
+            .orElseThrow { EntityNotFoundException("Proveedor", supplierId) }
 
         if (supplier.seller.id != seller.id) {
-            throw RuntimeException("No autorizado")
+            throw UnauthorizedActionException("No autorizado")
         }
 
         request.name?.let { supplier.name = it.trim() }
         request.nit?.let { nit ->
             if (nit.isNotBlank() && supplierRepository.existsBySellerIdAndNitAndIdNot(seller.id!!, nit, supplierId)) {
-                throw RuntimeException("Ya existe un proveedor con ese NIT")
+                throw ResourceAlreadyExistsException("Ya existe un proveedor con ese NIT")
             }
             supplier.nit = nit.trim()
         }
@@ -95,7 +96,7 @@ class SupplierService(
     @Transactional(readOnly = true)
     fun getSuppliers(email: String, includeInactive: Boolean = false): List<SupplierResponse> {
         val seller = userRepository.findByEmail(email)
-            .orElseThrow { RuntimeException("Usuario no encontrado") }
+            .orElseThrow { EntityNotFoundException("Usuario", email) }
 
         val suppliers = if (includeInactive) {
             supplierRepository.findBySellerIdOrderByNameAsc(seller.id!!)
@@ -114,7 +115,7 @@ class SupplierService(
     @Transactional(readOnly = true)
     fun getSupplierSummaries(email: String): List<SupplierSummaryResponse> {
         val seller = userRepository.findByEmail(email)
-            .orElseThrow { RuntimeException("Usuario no encontrado") }
+            .orElseThrow { EntityNotFoundException("Usuario", email) }
 
         return supplierRepository.findBySellerIdAndIsActiveTrueOrderByNameAsc(seller.id!!).map {
             SupplierSummaryResponse(
@@ -129,7 +130,7 @@ class SupplierService(
     @Transactional(readOnly = true)
     fun getSupplierStats(email: String): SupplierStatsResponse {
         val seller = userRepository.findByEmail(email)
-            .orElseThrow { RuntimeException("Usuario no encontrado") }
+            .orElseThrow { EntityNotFoundException("Usuario", email) }
 
         val sellerId = seller.id!!
         val total = supplierRepository.countBySellerId(sellerId).toInt()
@@ -150,7 +151,7 @@ class SupplierService(
     @Transactional(readOnly = true)
     fun getSupplierMetrics(email: String): List<SupplierMetricResponse> {
         val seller = userRepository.findByEmail(email)
-            .orElseThrow { RuntimeException("Usuario no encontrado") }
+            .orElseThrow { EntityNotFoundException("Usuario", email) }
 
         val batches = stockBatchRepository.findBySellerIdAndSupplierEntityIsNotNull(seller.id!!)
 
@@ -202,13 +203,13 @@ class SupplierService(
 
     private fun getOwnedSupplier(email: String, supplierId: Long): Supplier {
         val seller = userRepository.findByEmail(email)
-            .orElseThrow { RuntimeException("Usuario no encontrado") }
+            .orElseThrow { EntityNotFoundException("Usuario", email) }
 
         val supplier = supplierRepository.findById(supplierId)
-            .orElseThrow { RuntimeException("Proveedor no encontrado") }
+            .orElseThrow { EntityNotFoundException("Proveedor", supplierId) }
 
         if (supplier.seller.id != seller.id) {
-            throw RuntimeException("No autorizado")
+            throw UnauthorizedActionException("No autorizado")
         }
 
         return supplier

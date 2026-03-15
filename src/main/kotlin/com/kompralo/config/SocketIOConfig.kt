@@ -9,7 +9,10 @@ import org.springframework.stereotype.Component
 import jakarta.annotation.PreDestroy
 
 @Component
-class SocketIOConfig {
+class SocketIOConfig(
+    @Value("\${app.cors.allowed-origins:http://localhost:*}")
+    private val allowedOrigins: String
+) {
 
     @Value("\${socketio.host:0.0.0.0}")
     private lateinit var host: String
@@ -25,7 +28,7 @@ class SocketIOConfig {
             hostname = host
             port = this@SocketIOConfig.port
 
-            origin = "http://localhost:5173,http://localhost:5174,http://localhost:3000"
+            origin = allowedOrigins.split(",").joinToString(",") { it.trim() }
 
             isAllowCustomRequests = true
             upgradeTimeout = 10000

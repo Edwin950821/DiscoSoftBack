@@ -18,29 +18,17 @@ class SupplierController(
         @RequestParam(defaultValue = "false") includeInactive: Boolean,
         auth: Authentication
     ): ResponseEntity<*> {
-        return try {
-            ResponseEntity.ok(supplierService.getSuppliers(auth.name, includeInactive))
-        } catch (e: RuntimeException) {
-            ResponseEntity.badRequest().body(mapOf("message" to e.message))
-        }
+        return ResponseEntity.ok(supplierService.getSuppliers(auth.name, includeInactive))
     }
 
     @GetMapping("/summaries")
     fun getSupplierSummaries(auth: Authentication): ResponseEntity<*> {
-        return try {
-            ResponseEntity.ok(supplierService.getSupplierSummaries(auth.name))
-        } catch (e: RuntimeException) {
-            ResponseEntity.badRequest().body(mapOf("message" to e.message))
-        }
+        return ResponseEntity.ok(supplierService.getSupplierSummaries(auth.name))
     }
 
     @GetMapping("/{id}")
     fun getSupplier(@PathVariable id: Long, auth: Authentication): ResponseEntity<*> {
-        return try {
-            ResponseEntity.ok(supplierService.getSupplier(auth.name, id))
-        } catch (e: RuntimeException) {
-            ResponseEntity.badRequest().body(mapOf("message" to e.message))
-        }
+        return ResponseEntity.ok(supplierService.getSupplier(auth.name, id))
     }
 
     @PostMapping
@@ -48,11 +36,7 @@ class SupplierController(
         @RequestBody request: CreateSupplierRequest,
         auth: Authentication
     ): ResponseEntity<*> {
-        return try {
-            ResponseEntity.ok(supplierService.createSupplier(auth.name, request))
-        } catch (e: RuntimeException) {
-            ResponseEntity.badRequest().body(mapOf("message" to e.message))
-        }
+        return ResponseEntity.ok(supplierService.createSupplier(auth.name, request))
     }
 
     @PutMapping("/{id}")
@@ -61,55 +45,31 @@ class SupplierController(
         @RequestBody request: UpdateSupplierRequest,
         auth: Authentication
     ): ResponseEntity<*> {
-        return try {
-            ResponseEntity.ok(supplierService.updateSupplier(auth.name, id, request))
-        } catch (e: RuntimeException) {
-            ResponseEntity.badRequest().body(mapOf("message" to e.message))
-        }
+        return ResponseEntity.ok(supplierService.updateSupplier(auth.name, id, request))
     }
 
     @PatchMapping("/{id}/deactivate")
     fun deactivateSupplier(@PathVariable id: Long, auth: Authentication): ResponseEntity<*> {
-        return try {
-            ResponseEntity.ok(supplierService.deactivateSupplier(auth.name, id))
-        } catch (e: RuntimeException) {
-            ResponseEntity.badRequest().body(mapOf("message" to e.message))
-        }
+        return ResponseEntity.ok(supplierService.deactivateSupplier(auth.name, id))
     }
 
     @PatchMapping("/{id}/activate")
     fun activateSupplier(@PathVariable id: Long, auth: Authentication): ResponseEntity<*> {
-        return try {
-            ResponseEntity.ok(supplierService.activateSupplier(auth.name, id))
-        } catch (e: RuntimeException) {
-            ResponseEntity.badRequest().body(mapOf("message" to e.message))
-        }
+        return ResponseEntity.ok(supplierService.activateSupplier(auth.name, id))
     }
 
     @GetMapping("/stats")
     fun getStats(auth: Authentication): ResponseEntity<*> {
-        return try {
-            ResponseEntity.ok(supplierService.getSupplierStats(auth.name))
-        } catch (e: RuntimeException) {
-            ResponseEntity.badRequest().body(mapOf("message" to e.message))
-        }
+        return ResponseEntity.ok(supplierService.getSupplierStats(auth.name))
     }
 
     @GetMapping("/metrics")
     fun getMetrics(auth: Authentication): ResponseEntity<*> {
-        return try {
-            ResponseEntity.ok(supplierService.getSupplierMetrics(auth.name))
-        } catch (e: RuntimeException) {
-            ResponseEntity.badRequest().body(mapOf("message" to e.message))
-        }
+        return ResponseEntity.ok(supplierService.getSupplierMetrics(auth.name))
     }
 
     @GetMapping("/{id}/history")
     fun getPurchaseHistory(@PathVariable id: Long, auth: Authentication): ResponseEntity<*> {
-        return try {
-            ResponseEntity.ok(supplierService.getSupplierPurchaseHistory(auth.name, id))
-        } catch (e: RuntimeException) {
-            ResponseEntity.badRequest().body(mapOf("message" to e.message))
-        }
+        return ResponseEntity.ok(supplierService.getSupplierPurchaseHistory(auth.name, id))
     }
 }

@@ -3,6 +3,7 @@ package com.kompralo.services
 import com.kompralo.model.NotificationType
 import com.kompralo.model.RelatedEntityType
 import com.kompralo.model.TaskStatus
+import com.kompralo.port.NotificationPort
 import com.kompralo.repository.TaskRepository
 import org.slf4j.LoggerFactory
 import org.springframework.scheduling.annotation.Scheduled
@@ -14,7 +15,7 @@ import java.time.format.DateTimeFormatter
 @Component
 class TaskNotificationScheduler(
     private val taskRepository: TaskRepository,
-    private val notificationService: NotificationService
+    private val notificationPort: NotificationPort
 ) {
     private val log = LoggerFactory.getLogger(TaskNotificationScheduler::class.java)
     private val dateFormatter = DateTimeFormatter.ofPattern("dd MMM yyyy, HH:mm")
@@ -40,7 +41,7 @@ class TaskNotificationScheduler(
             val userId = task.createdBy.id ?: continue
             val dueFormatted = task.dueDate?.format(dateFormatter) ?: "pronto"
 
-            notificationService.createAndSend(
+            notificationPort.createAndSend(
                 userId = userId,
                 type = NotificationType.TASK_DUE_SOON,
                 title = "Tarea a punto de vencer",
@@ -70,7 +71,7 @@ class TaskNotificationScheduler(
             val userId = task.createdBy.id ?: continue
             val dueFormatted = task.dueDate?.format(dateFormatter) ?: ""
 
-            notificationService.createAndSend(
+            notificationPort.createAndSend(
                 userId = userId,
                 type = NotificationType.TASK_OVERDUE,
                 title = "Tarea vencida",

@@ -2,7 +2,6 @@ package com.kompralo.controller
 
 import com.kompralo.repository.UserRepository
 import com.kompralo.services.NotificationService
-import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.*
@@ -24,24 +23,14 @@ class NotificationController(
         @RequestParam(defaultValue = "0") page: Int,
         @RequestParam(defaultValue = "20") size: Int
     ): ResponseEntity<*> {
-        return try {
-            val user = getUser(authentication)
-            ResponseEntity.ok(notificationService.getNotifications(user, page, size))
-        } catch (e: Exception) {
-            ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(mapOf("message" to (e.message ?: "Error al obtener notificaciones")))
-        }
+        val user = getUser(authentication)
+        return ResponseEntity.ok(notificationService.getNotifications(user, page, size))
     }
 
     @GetMapping("/unread-count")
     fun getUnreadCount(authentication: Authentication): ResponseEntity<*> {
-        return try {
-            val user = getUser(authentication)
-            ResponseEntity.ok(notificationService.getUnreadCount(user))
-        } catch (e: Exception) {
-            ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(mapOf("message" to (e.message ?: "Error al obtener conteo")))
-        }
+        val user = getUser(authentication)
+        return ResponseEntity.ok(notificationService.getUnreadCount(user))
     }
 
     @PutMapping("/{id}/read")
@@ -49,25 +38,15 @@ class NotificationController(
         @PathVariable id: Long,
         authentication: Authentication
     ): ResponseEntity<*> {
-        return try {
-            val user = getUser(authentication)
-            ResponseEntity.ok(notificationService.markAsRead(id, user))
-        } catch (e: RuntimeException) {
-            ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(mapOf("message" to (e.message ?: "Notificacion no encontrada")))
-        }
+        val user = getUser(authentication)
+        return ResponseEntity.ok(notificationService.markAsRead(id, user))
     }
 
     @PutMapping("/read-all")
     fun markAllAsRead(authentication: Authentication): ResponseEntity<*> {
-        return try {
-            val user = getUser(authentication)
-            val count = notificationService.markAllAsRead(user)
-            ResponseEntity.ok(mapOf("markedAsRead" to count))
-        } catch (e: Exception) {
-            ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(mapOf("message" to (e.message ?: "Error al marcar notificaciones")))
-        }
+        val user = getUser(authentication)
+        val count = notificationService.markAllAsRead(user)
+        return ResponseEntity.ok(mapOf("markedAsRead" to count))
     }
 
     @DeleteMapping("/{id}")
@@ -75,13 +54,8 @@ class NotificationController(
         @PathVariable id: Long,
         authentication: Authentication
     ): ResponseEntity<*> {
-        return try {
-            val user = getUser(authentication)
-            notificationService.deleteNotification(id, user)
-            ResponseEntity.noContent().build<Void>()
-        } catch (e: RuntimeException) {
-            ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(mapOf("message" to (e.message ?: "Notificacion no encontrada")))
-        }
+        val user = getUser(authentication)
+        notificationService.deleteNotification(id, user)
+        return ResponseEntity.noContent().build<Void>()
     }
 }

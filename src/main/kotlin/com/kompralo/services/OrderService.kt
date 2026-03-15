@@ -1,10 +1,14 @@
 package com.kompralo.services
 
+import com.kompralo.exception.*
 import com.kompralo.dto.*
 import com.kompralo.model.*
 import com.kompralo.repository.OrderRepository
 import com.kompralo.repository.OrderItemRepository
 import com.kompralo.repository.ProductRepository
+import com.kompralo.port.EmailPort
+import com.kompralo.port.NotificationPort
+import com.kompralo.port.PdfPort
 import com.kompralo.repository.UserRepository
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
@@ -20,9 +24,9 @@ class OrderService(
     private val orderItemRepository: OrderItemRepository,
     private val productRepository: ProductRepository,
     private val userRepository: UserRepository,
-    private val notificationService: NotificationService,
-    private val pdfService: PdfService,
-    private val emailService: EmailService
+    private val notificationPort: NotificationPort,
+    private val pdfPort: PdfPort,
+    private val emailPort: EmailPort
 ) {
     private val logger = LoggerFactory.getLogger(OrderService::class.java)
 
@@ -52,10 +56,10 @@ class OrderService(
 
     fun getOrderById(id: Long, sellerId: Long): OrderResponse {
         val order = orderRepository.findById(id)
-            .orElseThrow { RuntimeException("Pedido no encontrado") }
+            .orElseThrow { EntityNotFoundException("Pedido", id) }
 
         if (order.seller.id != sellerId) {
-            throw RuntimeException("No autorizado para ver este pedido")
+            throw UnauthorizedActionException("No autorizado para ver este pedido")
         }
 
         return order.toResponse()
@@ -64,13 +68,13 @@ class OrderService(
     @Transactional
     fun createOrder(sellerId: Long, request: CreateOrderRequest): OrderResponse {
         val seller = userRepository.findById(sellerId)
-            .orElseThrow { RuntimeException("Vendedor no encontrado") }
+            .orElseThrow { EntityNotFoundException("Vendedor", sellerId) }
 
         val buyer = userRepository.findByEmail(request.buyerEmail)
-            .orElseThrow { RuntimeException("Comprador con email '${request.buyerEmail}' no encontrado. El comprador debe estar registrado.") }
+            .orElseThrow { EntityNotFoundException("Comprador", request.buyerEmail) }
 
         if (request.items.isEmpty()) {
-            throw RuntimeException("El pedido debe tener al menos un producto")
+            throw ValidationException("El pedido debe tener al menos un producto")
         }
 
         val orderNumber = generateOrderNumber()
@@ -80,18 +84,18 @@ class OrderService(
 
         for (itemRequest in request.items) {
             if (itemRequest.quantity <= 0) {
-                throw RuntimeException("La cantidad debe ser mayor a 0")
+                throw ValidationException("La cantidad debe ser mayor a 0")
             }
 
             val product = productRepository.findById(itemRequest.productId)
-                .orElseThrow { RuntimeException("Producto con ID ${itemRequest.productId} no encontrado") }
+                .orElseThrow { EntityNotFoundException("Producto", itemRequest.productId) }
 
             if (product.seller.id != sellerId) {
-                throw RuntimeException("El producto '${product.name}' no pertenece a tu tienda")
+                throw UnauthorizedActionException("El producto '${product.name}' no pertenece a tu tienda")
             }
 
             if (product.stock < itemRequest.quantity) {
-                throw RuntimeException("Stock insuficiente para '${product.name}'. Disponible: ${product.stock}, Solicitado: ${itemRequest.quantity}")
+                throw InsufficientStockException(product.name, itemRequest.quantity, product.stock)
             }
 
             val itemSubtotal = itemRequest.unitPrice.multiply(itemRequest.quantity.toBigDecimal()).subtract(itemRequest.discount)
@@ -130,7 +134,7 @@ class OrderService(
 
         for (itemRequest in request.items) {
             val product = productRepository.findById(itemRequest.productId)
-                .orElseThrow { RuntimeException("Producto con ID ${itemRequest.productId} no encontrado") }
+                .orElseThrow { EntityNotFoundException("Producto", itemRequest.productId) }
             val itemSubtotal = itemRequest.unitPrice.multiply(itemRequest.quantity.toBigDecimal()).subtract(itemRequest.discount)
 
             val orderItem = OrderItem(
@@ -152,7 +156,7 @@ class OrderService(
 
         val finalOrder = orderRepository.save(savedOrder)
 
-        notificationService.createAndSend(
+        notificationPort.createAndSend(
             userId = sellerId,
             type = NotificationType.NEW_ORDER,
             title = "Nuevo pedido creado",
@@ -169,15 +173,15 @@ class OrderService(
     @Transactional
     fun updateOrderStatus(id: Long, sellerId: Long, newStatus: OrderStatus): OrderResponse {
         val order = orderRepository.findById(id)
-            .orElseThrow { RuntimeException("Pedido no encontrado") }
+            .orElseThrow { EntityNotFoundException("Pedido", id) }
 
         if (order.seller.id != sellerId) {
-            throw RuntimeException("No autorizado para actualizar este pedido")
+            throw UnauthorizedActionException("No autorizado para actualizar este pedido")
         }
 
         val validNextStatuses = VALID_TRANSITIONS[order.status] ?: emptyList()
         if (newStatus !in validNextStatuses) {
-            throw RuntimeException("No se puede cambiar de ${order.status} a $newStatus. Transiciones válidas: $validNextStatuses")
+            throw BusinessRuleViolationException("No se puede cambiar de ${order.status} a $newStatus. Transiciones válidas: $validNextStatuses")
         }
 
         order.updateStatus(newStatus)
@@ -213,7 +217,7 @@ class OrderService(
         }
 
         // Notificar al vendedor
-        notificationService.createAndSend(
+        notificationPort.createAndSend(
             userId = sellerId,
             type = notifType,
             title = notifTitle,
@@ -234,7 +238,7 @@ class OrderService(
             else -> "Tu pedido ${order.orderNumber} se actualizo a $newStatus."
         }
 
-        notificationService.createAndSend(
+        notificationPort.createAndSend(
             userId = order.buyer.id!!,
             type = notifType,
             title = notifTitle,
@@ -251,14 +255,14 @@ class OrderService(
     @Transactional
     fun confirmPayment(id: Long, sellerId: Long): OrderResponse {
         val order = orderRepository.findById(id)
-            .orElseThrow { RuntimeException("Pedido no encontrado") }
+            .orElseThrow { EntityNotFoundException("Pedido", id) }
 
         if (order.seller.id != sellerId) {
-            throw RuntimeException("No autorizado para confirmar pago de este pedido")
+            throw UnauthorizedActionException("No autorizado para confirmar pago de este pedido")
         }
 
         if (order.paymentStatus == "PAID") {
-            throw RuntimeException("Este pedido ya está marcado como pagado")
+            throw BusinessRuleViolationException("Este pedido ya está marcado como pagado")
         }
 
         val method = order.paymentMethod ?: PaymentMethod.CASH_ON_DELIVERY
@@ -267,7 +271,7 @@ class OrderService(
 
         // Notify buyer (non-blocking - don't fail payment confirmation if notification fails)
         try {
-            notificationService.createAndSend(
+            notificationPort.createAndSend(
                 userId = order.buyer.id!!,
                 type = NotificationType.PAYMENT_SUCCESS,
                 title = "Pago confirmado",
@@ -287,24 +291,24 @@ class OrderService(
     @Transactional(readOnly = true)
     fun sendInvoice(id: Long, sellerId: Long): Map<String, String> {
         val order = orderRepository.findByIdWithDetails(id)
-            ?: throw RuntimeException("Pedido no encontrado")
+            ?: throw EntityNotFoundException("Pedido", id)
 
         if (order.seller.id != sellerId) {
-            throw RuntimeException("No autorizado para enviar factura de este pedido")
+            throw UnauthorizedActionException("No autorizado para enviar factura de este pedido")
         }
 
         if (order.paymentStatus != "PAID") {
-            throw RuntimeException("Solo se puede enviar factura de pedidos con pago confirmado")
+            throw BusinessRuleViolationException("Solo se puede enviar factura de pedidos con pago confirmado")
         }
 
         val pdf = try {
-            pdfService.generateReceipt(order)
+            pdfPort.generateReceipt(order)
         } catch (e: Exception) {
             logger.error("Error generando PDF para pedido ${order.orderNumber}: ${e.message}", e)
-            throw RuntimeException("Error al generar la factura PDF: ${e.message}")
+            throw BusinessRuleViolationException("Error al generar la factura PDF: ${e.message}")
         }
 
-        val sent = emailService.sendOrderConfirmationToBuyer(
+        val sent = emailPort.sendOrderConfirmationToBuyer(
             buyerEmail = order.buyer.email,
             buyerName = order.buyer.name,
             orderNumber = order.orderNumber,
@@ -315,7 +319,7 @@ class OrderService(
         )
 
         if (!sent) {
-            throw RuntimeException("No se pudo enviar el correo a ${order.buyer.email}. Revisa la configuración de Gmail API.")
+            throw BusinessRuleViolationException("No se pudo enviar el correo a ${order.buyer.email}. Revisa la configuración de Gmail API.")
         }
 
         return mapOf("message" to "Factura enviada exitosamente a ${order.buyer.email}")
@@ -324,10 +328,10 @@ class OrderService(
     @Transactional
     fun updateOrder(id: Long, sellerId: Long, request: UpdateOrderRequest): OrderResponse {
         val order = orderRepository.findById(id)
-            .orElseThrow { RuntimeException("Pedido no encontrado") }
+            .orElseThrow { EntityNotFoundException("Pedido", id) }
 
         if (order.seller.id != sellerId) {
-            throw RuntimeException("No autorizado para actualizar este pedido")
+            throw UnauthorizedActionException("No autorizado para actualizar este pedido")
         }
 
         request.paymentMethod?.let { order.paymentMethod = it }
@@ -343,20 +347,20 @@ class OrderService(
     @Transactional
     fun deleteOrder(id: Long, sellerId: Long) {
         val order = orderRepository.findById(id)
-            .orElseThrow { RuntimeException("Pedido no encontrado") }
+            .orElseThrow { EntityNotFoundException("Pedido", id) }
 
         if (order.seller.id != sellerId) {
-            throw RuntimeException("No autorizado para eliminar este pedido")
+            throw UnauthorizedActionException("No autorizado para eliminar este pedido")
         }
 
         if (order.status !in listOf(OrderStatus.PENDING, OrderStatus.CANCELLED)) {
-            throw RuntimeException("Solo se pueden eliminar pedidos en estado PENDING o CANCELLED. Estado actual: ${order.status}")
+            throw BusinessRuleViolationException("Solo se pueden eliminar pedidos en estado PENDING o CANCELLED. Estado actual: ${order.status}")
         }
 
         val orderNumber = order.orderNumber
         orderRepository.delete(order)
 
-        notificationService.createAndSend(
+        notificationPort.createAndSend(
             userId = sellerId,
             type = NotificationType.ORDER_CANCELLED,
             title = "Pedido eliminado",
@@ -411,7 +415,7 @@ class OrderService(
 
     private fun findSellerByEmail(email: String): User {
         return userRepository.findByEmail(email)
-            .orElseThrow { RuntimeException("Usuario no encontrado") }
+            .orElseThrow { EntityNotFoundException("Usuario", email) }
     }
 
     private fun generateOrderNumber(): String {

@@ -1,5 +1,6 @@
 package com.kompralo.services
 
+import com.kompralo.exception.*
 import com.kompralo.dto.*
 import com.kompralo.model.*
 import com.kompralo.repository.ProductImageRepository
@@ -31,9 +32,9 @@ class ProductService(
 
     fun getProductById(id: Long, sellerId: Long): ProductResponse {
         val product = productRepository.findByIdWithDetails(id)
-            ?: throw RuntimeException("Producto no encontrado")
+            ?: throw EntityNotFoundException("Producto", id)
         if (product.seller.id != sellerId) {
-            throw RuntimeException("No autorizado para ver este producto")
+            throw UnauthorizedActionException("No autorizado para ver este producto")
         }
         return product.toResponse()
     }
@@ -45,10 +46,10 @@ class ProductService(
     @Transactional
     fun createProduct(sellerId: Long, request: CreateProductRequest): ProductResponse {
         val seller = userRepository.findById(sellerId)
-            .orElseThrow { RuntimeException("Vendedor no encontrado") }
+            .orElseThrow { EntityNotFoundException("Vendedor", sellerId) }
 
         if (productRepository.existsBySkuAndSellerId(request.sku, sellerId)) {
-            throw RuntimeException("El SKU '${request.sku}' ya existe")
+            throw ResourceAlreadyExistsException("El SKU '${request.sku}' ya existe")
         }
 
         val product = Product(
@@ -99,16 +100,16 @@ class ProductService(
     @Transactional
     fun updateProduct(id: Long, sellerId: Long, request: UpdateProductRequest): ProductResponse {
         val product = productRepository.findById(id)
-            .orElseThrow { RuntimeException("Producto no encontrado") }
+            .orElseThrow { EntityNotFoundException("Producto", id) }
 
         if (product.seller.id != sellerId) {
-            throw RuntimeException("No autorizado para editar este producto")
+            throw UnauthorizedActionException("No autorizado para editar este producto")
         }
 
         request.name?.let { product.name = it }
         request.sku?.let { sku ->
             if (sku != product.sku && productRepository.existsBySkuAndSellerId(sku, sellerId)) {
-                throw RuntimeException("El SKU '$sku' ya está en uso")
+                throw ResourceAlreadyExistsException("El SKU '$sku' ya está en uso")
             }
             product.sku = sku
         }
@@ -186,10 +187,10 @@ class ProductService(
     @Transactional
     fun deleteProduct(id: Long, sellerId: Long) {
         val product = productRepository.findById(id)
-            .orElseThrow { RuntimeException("Producto no encontrado") }
+            .orElseThrow { EntityNotFoundException("Producto", id) }
 
         if (product.seller.id != sellerId) {
-            throw RuntimeException("No autorizado para eliminar este producto")
+            throw UnauthorizedActionException("No autorizado para eliminar este producto")
         }
 
         val productName = product.name
@@ -209,18 +210,18 @@ class ProductService(
     @Transactional
     fun restockProduct(sellerId: Long, request: RestockRequest): RestockResponse {
         if (request.quantity <= 0) {
-            throw RuntimeException("La cantidad debe ser mayor a 0")
+            throw ValidationException("La cantidad debe ser mayor a 0")
         }
 
         val product = productRepository.findById(request.productId)
-            .orElseThrow { RuntimeException("Producto no encontrado") }
+            .orElseThrow { EntityNotFoundException("Producto", request.productId) }
 
         if (product.seller.id != sellerId) {
-            throw RuntimeException("No autorizado para reabastecer este producto")
+            throw UnauthorizedActionException("No autorizado para reabastecer este producto")
         }
 
         val seller = userRepository.findById(sellerId)
-            .orElseThrow { RuntimeException("Vendedor no encontrado") }
+            .orElseThrow { EntityNotFoundException("Vendedor", sellerId) }
 
         val previousStock = product.stock
         product.restock(request.quantity)
@@ -276,10 +277,10 @@ class ProductService(
 
     fun getRestockHistory(productId: Long, sellerId: Long): List<RestockResponse> {
         val product = productRepository.findById(productId)
-            .orElseThrow { RuntimeException("Producto no encontrado") }
+            .orElseThrow { EntityNotFoundException("Producto", productId) }
 
         if (product.seller.id != sellerId) {
-            throw RuntimeException("No autorizado")
+            throw UnauthorizedActionException("No autorizado")
         }
 
         return stockRestockRepository.findByProductIdOrderByCreatedAtDesc(productId).map {

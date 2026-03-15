@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query
 
 interface ForumReplyRepository : JpaRepository<ForumReply, Long> {
     fun findByPostOrderByCreatedAtAsc(post: ForumPost): List<ForumReply>
+    fun findTop2ByPostOrderByCreatedAtDesc(post: ForumPost): List<ForumReply>
     fun countByPost(post: ForumPost): Long
 
     @Modifying

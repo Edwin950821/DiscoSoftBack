@@ -4,17 +4,26 @@ import com.kompralo.dto.*
 import com.kompralo.model.TaskPriority
 import com.kompralo.model.TaskStatus
 import com.kompralo.repository.UserRepository
+import com.kompralo.services.SubtaskService
+import com.kompralo.services.TaskLabelService
+import com.kompralo.services.TaskMetricsService
 import com.kompralo.services.TaskService
+import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
+import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.*
 import java.time.LocalDateTime
 
 @RestController
 @RequestMapping("/api")
+@PreAuthorize("hasAnyRole('BUSINESS', 'OWNER', 'ADMIN', 'MANAGER')")
 class TaskController(
     private val taskService: TaskService,
+    private val subtaskService: SubtaskService,
+    private val taskLabelService: TaskLabelService,
+    private val taskMetricsService: TaskMetricsService,
     private val userRepository: UserRepository
 ) {
 
@@ -41,7 +50,7 @@ class TaskController(
     @PostMapping("/tasks")
     fun createTask(
         auth: Authentication,
-        @RequestBody request: CreateTaskRequest
+        @Valid @RequestBody request: CreateTaskRequest
     ): ResponseEntity<TaskResponse> {
         val user = getUser(auth)
         val task = taskService.createTask(request, user)
@@ -62,7 +71,7 @@ class TaskController(
     fun updateTask(
         auth: Authentication,
         @PathVariable id: Long,
-        @RequestBody request: UpdateTaskRequest
+        @Valid @RequestBody request: UpdateTaskRequest
     ): ResponseEntity<TaskResponse> {
         val user = getUser(auth)
         val task = taskService.updateTask(id, request, user)
@@ -83,7 +92,7 @@ class TaskController(
     fun updateTaskStatus(
         auth: Authentication,
         @PathVariable id: Long,
-        @RequestBody request: UpdateTaskStatusRequest
+        @Valid @RequestBody request: UpdateTaskStatusRequest
     ): ResponseEntity<TaskResponse> {
         val user = getUser(auth)
         val task = taskService.updateTaskStatus(id, request.status, user)
@@ -96,10 +105,10 @@ class TaskController(
     fun addSubtask(
         auth: Authentication,
         @PathVariable taskId: Long,
-        @RequestBody request: CreateSubtaskRequest
+        @Valid @RequestBody request: CreateSubtaskRequest
     ): ResponseEntity<SubtaskResponse> {
         val user = getUser(auth)
-        val subtask = taskService.addSubtask(taskId, request, user)
+        val subtask = subtaskService.addSubtask(taskId, request, user)
         return ResponseEntity.status(HttpStatus.CREATED).body(subtask)
     }
 
@@ -108,10 +117,10 @@ class TaskController(
         auth: Authentication,
         @PathVariable taskId: Long,
         @PathVariable subtaskId: Long,
-        @RequestBody request: UpdateSubtaskRequest
+        @Valid @RequestBody request: UpdateSubtaskRequest
     ): ResponseEntity<SubtaskResponse> {
         val user = getUser(auth)
-        val subtask = taskService.updateSubtask(taskId, subtaskId, request, user)
+        val subtask = subtaskService.updateSubtask(taskId, subtaskId, request, user)
         return ResponseEntity.ok(subtask)
     }
 
@@ -120,7 +129,7 @@ class TaskController(
         @PathVariable taskId: Long,
         @PathVariable subtaskId: Long
     ): ResponseEntity<Void> {
-        taskService.deleteSubtask(taskId, subtaskId)
+        subtaskService.deleteSubtask(taskId, subtaskId)
         return ResponseEntity.noContent().build()
     }
 
@@ -137,7 +146,7 @@ class TaskController(
     fun addComment(
         auth: Authentication,
         @PathVariable taskId: Long,
-        @RequestBody request: CreateCommentRequest
+        @Valid @RequestBody request: CreateCommentRequest
     ): ResponseEntity<CommentResponse> {
         val user = getUser(auth)
         val comment = taskService.addComment(taskId, request, user)
@@ -167,7 +176,7 @@ class TaskController(
     @GetMapping("/tasks/metrics")
     fun getMetrics(auth: Authentication): ResponseEntity<TaskMetricsResponse> {
         val user = getUser(auth)
-        return ResponseEntity.ok(taskService.getMetrics(user))
+        return ResponseEntity.ok(taskMetricsService.getMetrics(user))
     }
 
     // ==================== LABELS ====================
@@ -175,22 +184,22 @@ class TaskController(
     @GetMapping("/labels")
     fun getLabels(auth: Authentication): ResponseEntity<List<LabelResponse>> {
         val user = getUser(auth)
-        return ResponseEntity.ok(taskService.getLabels(user))
+        return ResponseEntity.ok(taskLabelService.getLabels(user))
     }
 
     @PostMapping("/labels")
     fun createLabel(
         auth: Authentication,
-        @RequestBody request: CreateLabelRequest
+        @Valid @RequestBody request: CreateLabelRequest
     ): ResponseEntity<LabelResponse> {
         val user = getUser(auth)
-        val label = taskService.createLabel(request, user)
+        val label = taskLabelService.createLabel(request, user)
         return ResponseEntity.status(HttpStatus.CREATED).body(label)
     }
 
     @DeleteMapping("/labels/{id}")
     fun deleteLabel(@PathVariable id: Long): ResponseEntity<Void> {
-        taskService.deleteLabel(id)
+        taskLabelService.deleteLabel(id)
         return ResponseEntity.noContent().build()
     }
 }

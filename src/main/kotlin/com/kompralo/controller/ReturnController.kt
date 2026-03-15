@@ -18,20 +18,12 @@ class ReturnController(
         @RequestBody request: CreateReturnRequest,
         authentication: Authentication
     ): ResponseEntity<*> {
-        return try {
-            ResponseEntity.status(HttpStatus.CREATED).body(returnService.createReturn(authentication.name, request))
-        } catch (e: RuntimeException) {
-            ResponseEntity.badRequest().body(mapOf("message" to (e.message ?: "Error")))
-        }
+        return ResponseEntity.status(HttpStatus.CREATED).body(returnService.createReturn(authentication.name, request))
     }
 
     @GetMapping("/api/buyer/returns")
     fun getMyReturns(authentication: Authentication): ResponseEntity<*> {
-        return try {
-            ResponseEntity.ok(returnService.getMyReturns(authentication.name))
-        } catch (e: RuntimeException) {
-            ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(mapOf("message" to (e.message ?: "Error")))
-        }
+        return ResponseEntity.ok(returnService.getMyReturns(authentication.name))
     }
 
     @GetMapping("/api/returns")
@@ -39,29 +31,17 @@ class ReturnController(
         @RequestParam(required = false) status: ReturnStatus?,
         authentication: Authentication
     ): ResponseEntity<*> {
-        return try {
-            ResponseEntity.ok(returnService.getReturns(authentication.name, status))
-        } catch (e: RuntimeException) {
-            ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(mapOf("message" to (e.message ?: "Error")))
-        }
+        return ResponseEntity.ok(returnService.getReturns(authentication.name, status))
     }
 
     @GetMapping("/api/returns/{id}")
     fun getReturn(@PathVariable id: Long): ResponseEntity<*> {
-        return try {
-            ResponseEntity.ok(returnService.getReturn(id))
-        } catch (e: RuntimeException) {
-            ResponseEntity.status(HttpStatus.NOT_FOUND).body(mapOf("message" to (e.message ?: "Error")))
-        }
+        return ResponseEntity.ok(returnService.getReturn(id))
     }
 
     @GetMapping("/api/returns/stats")
     fun getReturnStats(authentication: Authentication): ResponseEntity<*> {
-        return try {
-            ResponseEntity.ok(returnService.getReturnStats(authentication.name))
-        } catch (e: RuntimeException) {
-            ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(mapOf("message" to (e.message ?: "Error")))
-        }
+        return ResponseEntity.ok(returnService.getReturnStats(authentication.name))
     }
 
     @PatchMapping("/api/returns/{id}/approve")
@@ -70,11 +50,7 @@ class ReturnController(
         @RequestBody request: ApproveReturnRequest,
         authentication: Authentication
     ): ResponseEntity<*> {
-        return try {
-            ResponseEntity.ok(returnService.approveReturn(id, authentication.name, request))
-        } catch (e: RuntimeException) {
-            ResponseEntity.badRequest().body(mapOf("message" to (e.message ?: "Error")))
-        }
+        return ResponseEntity.ok(returnService.approveReturn(id, authentication.name, request))
     }
 
     @PatchMapping("/api/returns/{id}/reject")
@@ -83,11 +59,7 @@ class ReturnController(
         @RequestBody request: RejectReturnRequest,
         authentication: Authentication
     ): ResponseEntity<*> {
-        return try {
-            ResponseEntity.ok(returnService.rejectReturn(id, authentication.name, request))
-        } catch (e: RuntimeException) {
-            ResponseEntity.badRequest().body(mapOf("message" to (e.message ?: "Error")))
-        }
+        return ResponseEntity.ok(returnService.rejectReturn(id, authentication.name, request))
     }
 
     @PatchMapping("/api/returns/{id}/escalate")
@@ -95,11 +67,7 @@ class ReturnController(
         @PathVariable id: Long,
         authentication: Authentication
     ): ResponseEntity<*> {
-        return try {
-            ResponseEntity.ok(returnService.escalateReturn(id, authentication.name))
-        } catch (e: RuntimeException) {
-            ResponseEntity.badRequest().body(mapOf("message" to (e.message ?: "Error")))
-        }
+        return ResponseEntity.ok(returnService.escalateReturn(id, authentication.name))
     }
 
     @PatchMapping("/api/returns/{id}/mark-refunded")
@@ -108,11 +76,7 @@ class ReturnController(
         @RequestBody request: MarkRefundIssuedRequest,
         authentication: Authentication
     ): ResponseEntity<*> {
-        return try {
-            ResponseEntity.ok(returnService.markRefundIssued(id, authentication.name, request))
-        } catch (e: RuntimeException) {
-            ResponseEntity.badRequest().body(mapOf("message" to (e.message ?: "Error")))
-        }
+        return ResponseEntity.ok(returnService.markRefundIssued(id, authentication.name, request))
     }
 
     @PatchMapping("/api/buyer/returns/{id}/confirm-refund")
@@ -120,11 +84,7 @@ class ReturnController(
         @PathVariable id: Long,
         authentication: Authentication
     ): ResponseEntity<*> {
-        return try {
-            ResponseEntity.ok(returnService.confirmRefundReceived(id, authentication.name))
-        } catch (e: RuntimeException) {
-            ResponseEntity.badRequest().body(mapOf("message" to (e.message ?: "Error")))
-        }
+        return ResponseEntity.ok(returnService.confirmRefundReceived(id, authentication.name))
     }
 
     @PatchMapping("/api/returns/{id}/admin-resolve")
@@ -132,10 +92,6 @@ class ReturnController(
         @PathVariable id: Long,
         @RequestBody request: AdminResolveReturnRequest
     ): ResponseEntity<*> {
-        return try {
-            ResponseEntity.ok(returnService.adminResolve(id, request))
-        } catch (e: RuntimeException) {
-            ResponseEntity.badRequest().body(mapOf("message" to (e.message ?: "Error")))
-        }
+        return ResponseEntity.ok(returnService.adminResolve(id, request))
     }
 }

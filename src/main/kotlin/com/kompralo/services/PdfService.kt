@@ -21,8 +21,10 @@ import com.itextpdf.layout.properties.HorizontalAlignment
 import com.itextpdf.layout.properties.TextAlignment
 import com.itextpdf.layout.properties.UnitValue
 import com.itextpdf.layout.properties.VerticalAlignment
+import com.kompralo.config.ShippingConfiguration
 import com.kompralo.model.Order
 import com.kompralo.model.PaymentMethod
+import com.kompralo.port.PdfPort
 import com.kompralo.repository.OrderRepository
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -36,8 +38,9 @@ import javax.imageio.ImageIO
 
 @Service
 class PdfService(
-    private val orderRepository: OrderRepository
-) {
+    private val orderRepository: OrderRepository,
+    private val shippingConfig: ShippingConfiguration
+) : PdfPort {
 
     private val black = DeviceRgb(0, 0, 0)
     private val darkText = DeviceRgb(30, 30, 30)
@@ -55,12 +58,12 @@ class PdfService(
     }
 
     @Transactional(readOnly = true)
-    fun generateReceiptById(orderId: Long): ByteArray? {
+    override fun generateReceiptById(orderId: Long): ByteArray? {
         val order = orderRepository.findByIdWithDetails(orderId) ?: return null
         return generateReceipt(order)
     }
 
-    fun generateReceipt(order: Order): ByteArray {
+    override fun generateReceipt(order: Order): ByteArray {
         val topM = 12f
         val bottomM = 12f
         val leftM = 10f
@@ -183,7 +186,7 @@ class PdfService(
         totalRow(t, "IVA (19%):", if (order.tax > BigDecimal.ZERO) cop(order.tax) else "$0")
         if (order.shipping > BigDecimal.ZERO) {
             if (order.paymentMethod == PaymentMethod.CASH_ON_DELIVERY) {
-                val codFee = BigDecimal("5000")
+                val codFee = shippingConfig.codFee
                 val shippingOnly = order.shipping.subtract(codFee)
                 if (shippingOnly > BigDecimal.ZERO) totalRow(t, "Envio:", cop(shippingOnly))
                 totalRow(t, "Recaudo contra entrega:", cop(codFee))

@@ -3,6 +3,7 @@ package com.kompralo.services
 import com.kompralo.model.PasswordResetToken
 import com.kompralo.model.User
 import com.kompralo.repository.PasswordResetTokenRepository
+import com.kompralo.port.EmailPort
 import com.kompralo.repository.UserRepository
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
@@ -16,7 +17,7 @@ import java.util.*
 class PasswordResetService(
     private val userRepository: UserRepository,
     private val tokenRepository: PasswordResetTokenRepository,
-    private val emailService: EmailService,
+    private val emailPort: EmailPort,
     private val passwordEncoder: PasswordEncoder
 ) {
 
@@ -33,7 +34,7 @@ class PasswordResetService(
         val user = userRepository.findByEmail(email)
             .orElseThrow { IllegalArgumentException("No existe un usuario con este email") }
 
-        if (!user.isActive) {
+        if (!user.isUserActive()) {
             throw IllegalArgumentException("Esta cuenta está desactivada")
         }
 
@@ -57,7 +58,7 @@ class PasswordResetService(
 
         val userEmail = user.email
         val resetUrl = "$frontendUrl/password-reset"
-        val emailSent = emailService.sendPasswordResetEmail(
+        val emailSent = emailPort.sendPasswordResetEmail(
             to = userEmail,
             userName = user.name,
             resetToken = token,

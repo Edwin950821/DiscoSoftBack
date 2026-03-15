@@ -2,6 +2,7 @@ package com.kompralo.controller
 
 import com.kompralo.dto.CreateReviewRequest
 import com.kompralo.services.ReviewService
+import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
@@ -15,24 +16,15 @@ class ReviewController(
     @PostMapping("/api/reviews")
     fun createReview(
         authentication: Authentication,
-        @RequestBody request: CreateReviewRequest,
+        @Valid @RequestBody request: CreateReviewRequest,
     ): ResponseEntity<*> {
-        return try {
-            val review = reviewService.createReview(authentication.name, request)
-            ResponseEntity.status(HttpStatus.CREATED).body(review)
-        } catch (e: RuntimeException) {
-            ResponseEntity.badRequest().body(mapOf("message" to (e.message ?: "Error al crear resena")))
-        }
+        val review = reviewService.createReview(authentication.name, request)
+        return ResponseEntity.status(HttpStatus.CREATED).body(review)
     }
 
     @GetMapping("/api/public/products/{productId}/reviews")
     fun getReviews(@PathVariable productId: Long): ResponseEntity<*> {
-        return try {
-            ResponseEntity.ok(reviewService.getReviewsByProduct(productId))
-        } catch (e: Exception) {
-            ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(mapOf("message" to (e.message ?: "Error al obtener resenas")))
-        }
+        return ResponseEntity.ok(reviewService.getReviewsByProduct(productId))
     }
 
     @DeleteMapping("/api/reviews/{id}")
@@ -40,11 +32,7 @@ class ReviewController(
         authentication: Authentication,
         @PathVariable id: Long,
     ): ResponseEntity<*> {
-        return try {
-            reviewService.deleteReview(id, authentication.name)
-            ResponseEntity.ok(mapOf("message" to "Resena eliminada"))
-        } catch (e: RuntimeException) {
-            ResponseEntity.badRequest().body(mapOf("message" to (e.message ?: "Error al eliminar resena")))
-        }
+        reviewService.deleteReview(id, authentication.name)
+        return ResponseEntity.ok(mapOf("message" to "Resena eliminada"))
     }
 }

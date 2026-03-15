@@ -1,5 +1,6 @@
 package com.kompralo.services
 
+import com.kompralo.exception.*
 import com.kompralo.dto.*
 import com.kompralo.model.*
 import com.kompralo.repository.*
@@ -33,7 +34,7 @@ class SettingsService(
 
     private fun findSeller(email: String): User {
         return userRepository.findByEmail(email)
-            .orElseThrow { RuntimeException("Vendedor no encontrado") }
+            .orElseThrow { EntityNotFoundException("Vendedor", email) }
     }
 
     private fun getOrCreateSettings(seller: User): StoreSettings {
@@ -79,7 +80,11 @@ class SettingsService(
             )
         }
 
-        request.businessName?.let { profile.businessName = it }
+        request.businessName?.let {
+            profile.businessName = it
+            seller.name = it
+            userRepository.save(seller)
+        }
         request.businessType?.let { profile.businessType = it }
         request.description?.let { profile.description = it }
         request.logoUrl?.let { profile.logoUrl = it }
@@ -162,8 +167,8 @@ class SettingsService(
     fun updateShippingZone(email: String, id: Long, request: UpdateShippingZoneRequest): ShippingZoneResponse {
         val seller = findSeller(email)
         val zone = shippingZoneRepository.findById(id)
-            .orElseThrow { RuntimeException("Zona de envio no encontrada") }
-        if (zone.seller.id != seller.id) throw RuntimeException("No autorizado")
+            .orElseThrow { EntityNotFoundException("Zona de envio", id) }
+        if (zone.seller.id != seller.id) throw UnauthorizedActionException("No autorizado")
 
         request.name?.let { zone.name = it }
         request.type?.let { zone.type = it }
@@ -178,8 +183,8 @@ class SettingsService(
     fun deleteShippingZone(email: String, id: Long) {
         val seller = findSeller(email)
         val zone = shippingZoneRepository.findById(id)
-            .orElseThrow { RuntimeException("Zona de envio no encontrada") }
-        if (zone.seller.id != seller.id) throw RuntimeException("No autorizado")
+            .orElseThrow { EntityNotFoundException("Zona de envio", id) }
+        if (zone.seller.id != seller.id) throw UnauthorizedActionException("No autorizado")
         shippingZoneRepository.delete(zone)
     }
 
@@ -211,8 +216,8 @@ class SettingsService(
     fun updateTaxRule(email: String, id: Long, request: UpdateTaxRuleRequest): TaxRuleResponse {
         val seller = findSeller(email)
         val rule = taxRuleRepository.findById(id)
-            .orElseThrow { RuntimeException("Regla fiscal no encontrada") }
-        if (rule.seller.id != seller.id) throw RuntimeException("No autorizado")
+            .orElseThrow { EntityNotFoundException("Regla fiscal", id) }
+        if (rule.seller.id != seller.id) throw UnauthorizedActionException("No autorizado")
 
         request.name?.let { rule.name = it }
         request.location?.let { rule.location = it }
@@ -226,8 +231,8 @@ class SettingsService(
     fun deleteTaxRule(email: String, id: Long) {
         val seller = findSeller(email)
         val rule = taxRuleRepository.findById(id)
-            .orElseThrow { RuntimeException("Regla fiscal no encontrada") }
-        if (rule.seller.id != seller.id) throw RuntimeException("No autorizado")
+            .orElseThrow { EntityNotFoundException("Regla fiscal", id) }
+        if (rule.seller.id != seller.id) throw UnauthorizedActionException("No autorizado")
         taxRuleRepository.delete(rule)
     }
 
@@ -319,8 +324,8 @@ class SettingsService(
     fun updatePolicy(email: String, id: Long, request: UpdateStorePolicyRequest): StorePolicyResponse {
         val seller = findSeller(email)
         val policy = storePolicyRepository.findById(id)
-            .orElseThrow { RuntimeException("Politica no encontrada") }
-        if (policy.seller.id != seller.id) throw RuntimeException("No autorizado")
+            .orElseThrow { EntityNotFoundException("Politica", id) }
+        if (policy.seller.id != seller.id) throw UnauthorizedActionException("No autorizado")
 
         request.title?.let { policy.title = it }
         request.content?.let { policy.content = it }
@@ -332,8 +337,8 @@ class SettingsService(
     fun deletePolicy(email: String, id: Long) {
         val seller = findSeller(email)
         val policy = storePolicyRepository.findById(id)
-            .orElseThrow { RuntimeException("Politica no encontrada") }
-        if (policy.seller.id != seller.id) throw RuntimeException("No autorizado")
+            .orElseThrow { EntityNotFoundException("Politica", id) }
+        if (policy.seller.id != seller.id) throw UnauthorizedActionException("No autorizado")
         storePolicyRepository.delete(policy)
     }
 

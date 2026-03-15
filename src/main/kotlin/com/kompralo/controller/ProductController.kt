@@ -5,13 +5,16 @@ import com.kompralo.dto.RestockRequest
 import com.kompralo.dto.UpdateProductRequest
 import com.kompralo.repository.UserRepository
 import com.kompralo.services.ProductService
+import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
+import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.*
 
 @RestController
 @RequestMapping("/api/products")
+@PreAuthorize("hasAnyRole('BUSINESS', 'OWNER', 'ADMIN')")
 class ProductController(
     private val productService: ProductService,
     private val userRepository: UserRepository
@@ -29,18 +32,13 @@ class ProductController(
         @RequestParam(required = false) search: String?,
         authentication: Authentication
     ): ResponseEntity<*> {
-        return try {
-            val sellerId = getSellerId(authentication)
-            val products = if (!search.isNullOrBlank()) {
-                productService.searchProducts(sellerId, search)
-            } else {
-                productService.getProductsBySeller(sellerId)
-            }
-            ResponseEntity.ok(products)
-        } catch (e: Exception) {
-            ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(mapOf("message" to (e.message ?: "Error al obtener productos")))
+        val sellerId = getSellerId(authentication)
+        val products = if (!search.isNullOrBlank()) {
+            productService.searchProducts(sellerId, search)
+        } else {
+            productService.getProductsBySeller(sellerId)
         }
+        return ResponseEntity.ok(products)
     }
 
     @GetMapping("/{id}")
@@ -48,43 +46,28 @@ class ProductController(
         @PathVariable id: Long,
         authentication: Authentication
     ): ResponseEntity<*> {
-        return try {
-            val sellerId = getSellerId(authentication)
-            ResponseEntity.ok(productService.getProductById(id, sellerId))
-        } catch (e: RuntimeException) {
-            ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(mapOf("message" to (e.message ?: "Producto no encontrado")))
-        }
+        val sellerId = getSellerId(authentication)
+        return ResponseEntity.ok(productService.getProductById(id, sellerId))
     }
 
     @PostMapping
     fun createProduct(
-        @RequestBody request: CreateProductRequest,
+        @Valid @RequestBody request: CreateProductRequest,
         authentication: Authentication
     ): ResponseEntity<*> {
-        return try {
-            val sellerId = getSellerId(authentication)
-            ResponseEntity.status(HttpStatus.CREATED)
-                .body(productService.createProduct(sellerId, request))
-        } catch (e: RuntimeException) {
-            ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(mapOf("message" to (e.message ?: "Error al crear producto")))
-        }
+        val sellerId = getSellerId(authentication)
+        return ResponseEntity.status(HttpStatus.CREATED)
+            .body(productService.createProduct(sellerId, request))
     }
 
     @PutMapping("/{id}")
     fun updateProduct(
         @PathVariable id: Long,
-        @RequestBody request: UpdateProductRequest,
+        @Valid @RequestBody request: UpdateProductRequest,
         authentication: Authentication
     ): ResponseEntity<*> {
-        return try {
-            val sellerId = getSellerId(authentication)
-            ResponseEntity.ok(productService.updateProduct(id, sellerId, request))
-        } catch (e: RuntimeException) {
-            ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(mapOf("message" to (e.message ?: "Error al actualizar producto")))
-        }
+        val sellerId = getSellerId(authentication)
+        return ResponseEntity.ok(productService.updateProduct(id, sellerId, request))
     }
 
     @DeleteMapping("/{id}")
@@ -92,28 +75,18 @@ class ProductController(
         @PathVariable id: Long,
         authentication: Authentication
     ): ResponseEntity<*> {
-        return try {
-            val sellerId = getSellerId(authentication)
-            productService.deleteProduct(id, sellerId)
-            ResponseEntity.noContent().build<Void>()
-        } catch (e: RuntimeException) {
-            ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(mapOf("message" to (e.message ?: "Error al eliminar producto")))
-        }
+        val sellerId = getSellerId(authentication)
+        productService.deleteProduct(id, sellerId)
+        return ResponseEntity.noContent().build<Void>()
     }
 
     @PostMapping("/restock")
     fun restockProduct(
-        @RequestBody request: RestockRequest,
+        @Valid @RequestBody request: RestockRequest,
         authentication: Authentication
     ): ResponseEntity<*> {
-        return try {
-            val sellerId = getSellerId(authentication)
-            ResponseEntity.ok(productService.restockProduct(sellerId, request))
-        } catch (e: RuntimeException) {
-            ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(mapOf("message" to (e.message ?: "Error al reabastecer stock")))
-        }
+        val sellerId = getSellerId(authentication)
+        return ResponseEntity.ok(productService.restockProduct(sellerId, request))
     }
 
     @GetMapping("/{id}/restock-history")
@@ -121,12 +94,7 @@ class ProductController(
         @PathVariable id: Long,
         authentication: Authentication
     ): ResponseEntity<*> {
-        return try {
-            val sellerId = getSellerId(authentication)
-            ResponseEntity.ok(productService.getRestockHistory(id, sellerId))
-        } catch (e: RuntimeException) {
-            ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(mapOf("message" to (e.message ?: "Error al obtener historial")))
-        }
+        val sellerId = getSellerId(authentication)
+        return ResponseEntity.ok(productService.getRestockHistory(id, sellerId))
     }
 }

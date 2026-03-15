@@ -47,6 +47,7 @@ dependencies {
 	implementation("com.google.zxing:core:3.5.2")
 	implementation("com.google.zxing:javase:3.5.2")
 	implementation("com.google.firebase:firebase-admin:9.2.0")
+	implementation("com.bucket4j:bucket4j-core:8.7.0")
 	testImplementation("org.springframework.boot:spring-boot-starter-test")
 	testImplementation("org.springframework.security:spring-security-test")
 }

@@ -25,11 +25,17 @@ class JwtAuthenticationFilter(
         val publicPaths = listOf(
             "/api/auth/register",
             "/api/auth/login",
+            "/api/auth/login/2fa",
             "/api/auth/google",
             "/api/auth/google/register",
+            "/api/auth/google/register-with-token",
             "/api/auth/logout",
             "/api/auth/password-reset",
-            "/api/auth/health"
+            "/api/auth/health",
+            "/api/public/",
+            "/api/sellers",
+            "/api/webhooks/",
+            "/api/disco/"
         )
 
         val requestPath = request.servletPath

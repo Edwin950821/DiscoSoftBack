@@ -18,14 +18,14 @@ data class User(
     var password: String,
 
     @Column(nullable = false)
-    val name: String,
+    var name: String,
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     var role: Role = Role.USER,
 
-    @Column(nullable = false)
-    var isActive: Boolean = true,
+    @Column(name = "is_active")
+    var isActive: Boolean? = true,
 
     @Column(nullable = false, updatable = false)
     val createdAt: LocalDateTime = LocalDateTime.now(),
@@ -79,13 +79,29 @@ data class User(
     val defaultCurrency: String? = null,
 
     @Column(name = "auth_provider")
-    var authProvider: String? = null
+    var authProvider: String? = null,
+
+    @Column(name = "failed_login_attempts")
+    var failedLoginAttempts: Int? = 0,
+
+    @Column(name = "locked_until")
+    var lockedUntil: LocalDateTime? = null
 ) {
+
+    @PostLoad
+    fun setDefaults() {
+        if (failedLoginAttempts == null) failedLoginAttempts = 0
+        if (isActive == null) isActive = true
+    }
 
     @PreUpdate
     fun onUpdate() {
         updatedAt = LocalDateTime.now()
     }
+
+    fun getFailedAttempts(): Int = failedLoginAttempts ?: 0
+
+    fun isUserActive(): Boolean = isActive ?: true
 }
 
 enum class Role {
@@ -95,5 +111,6 @@ enum class Role {
     OWNER,
     MANAGER,
     ACCOUNTANT,
-    VIEWER
+    VIEWER,
+    MESERO
 }

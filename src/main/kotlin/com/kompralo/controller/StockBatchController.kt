@@ -27,14 +27,9 @@ class StockBatchController(
         @RequestBody request: BatchRestockRequest,
         authentication: Authentication
     ): ResponseEntity<*> {
-        return try {
-            val sellerId = getSellerId(authentication)
-            ResponseEntity.status(HttpStatus.CREATED)
-                .body(stockBatchService.createBatch(sellerId, request))
-        } catch (e: RuntimeException) {
-            ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(mapOf("message" to (e.message ?: "Error al crear lote")))
-        }
+        val sellerId = getSellerId(authentication)
+        return ResponseEntity.status(HttpStatus.CREATED)
+            .body(stockBatchService.createBatch(sellerId, request))
     }
 
     @GetMapping
@@ -42,13 +37,8 @@ class StockBatchController(
         @RequestParam(required = false) days: Int?,
         authentication: Authentication
     ): ResponseEntity<*> {
-        return try {
-            val sellerId = getSellerId(authentication)
-            ResponseEntity.ok(stockBatchService.getBatches(sellerId, days))
-        } catch (e: Exception) {
-            ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(mapOf("message" to (e.message ?: "Error al obtener lotes")))
-        }
+        val sellerId = getSellerId(authentication)
+        return ResponseEntity.ok(stockBatchService.getBatches(sellerId, days))
     }
 
     @GetMapping("/{id}")
@@ -56,12 +46,7 @@ class StockBatchController(
         @PathVariable id: Long,
         authentication: Authentication
     ): ResponseEntity<*> {
-        return try {
-            val sellerId = getSellerId(authentication)
-            ResponseEntity.ok(stockBatchService.getBatchById(sellerId, id))
-        } catch (e: RuntimeException) {
-            ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(mapOf("message" to (e.message ?: "Lote no encontrado")))
-        }
+        val sellerId = getSellerId(authentication)
+        return ResponseEntity.ok(stockBatchService.getBatchById(sellerId, id))
     }
 }

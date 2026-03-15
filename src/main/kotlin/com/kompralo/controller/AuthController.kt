@@ -11,6 +11,7 @@ import com.kompralo.dto.UpdateProfilePictureRequest
 import com.kompralo.services.AuthService
 import jakarta.servlet.http.Cookie
 import jakarta.servlet.http.HttpServletResponse
+import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
@@ -20,6 +21,7 @@ import org.springframework.web.bind.annotation.*
 class AuthController(
     private val authService: AuthService
 ) {
+    private val log = org.slf4j.LoggerFactory.getLogger(AuthController::class.java)
 
     private fun createAuthCookie(token: String, isSecure: Boolean = false): Cookie {
         return Cookie("authToken", token).apply {
@@ -49,7 +51,7 @@ class AuthController(
 
     @PostMapping("/register")
     fun register(
-        @RequestBody request: RegisterRequest,
+        @Valid @RequestBody request: RegisterRequest,
         servletRequest: jakarta.servlet.http.HttpServletRequest,
         servletResponse: HttpServletResponse
     ): ResponseEntity<*> {
@@ -65,6 +67,7 @@ class AuthController(
                 .body(mapOf("message" to (e.message ?: "Error en el registro")))
 
         } catch (e: Exception) {
+            log.error("Error en register: ${e.message}", e)
             ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(mapOf("message" to "Error interno del servidor"))
         }
@@ -72,7 +75,7 @@ class AuthController(
 
     @PostMapping("/login")
     fun login(
-        @RequestBody request: LoginRequest,
+        @Valid @RequestBody request: LoginRequest,
         servletRequest: jakarta.servlet.http.HttpServletRequest,
         servletResponse: HttpServletResponse
     ): ResponseEntity<*> {
@@ -88,6 +91,7 @@ class AuthController(
                 .body(mapOf("message" to (e.message ?: "Credenciales inválidas")))
 
         } catch (e: Exception) {
+            log.error("Error en login: ${e.message}", e)
             ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(mapOf("message" to "Error interno del servidor"))
         }
@@ -95,7 +99,7 @@ class AuthController(
 
     @PostMapping("/login/2fa")
     fun loginWith2FA(
-        @RequestBody request: LoginWith2FARequest,
+        @Valid @RequestBody request: LoginWith2FARequest,
         servletRequest: jakarta.servlet.http.HttpServletRequest,
         servletResponse: HttpServletResponse
     ): ResponseEntity<*> {
@@ -118,7 +122,7 @@ class AuthController(
 
     @PostMapping("/google/register")
     fun googleRegister(
-        @RequestBody request: GoogleRegisterRequest,
+        @Valid @RequestBody request: GoogleRegisterRequest,
         servletRequest: jakarta.servlet.http.HttpServletRequest,
         servletResponse: HttpServletResponse
     ): ResponseEntity<Any> {
@@ -139,7 +143,7 @@ class AuthController(
 
     @PostMapping("/google/register-with-token")
     fun googleRegisterWithToken(
-        @RequestBody request: GoogleRegisterWithTokenRequest,
+        @Valid @RequestBody request: GoogleRegisterWithTokenRequest,
         servletRequest: jakarta.servlet.http.HttpServletRequest,
         servletResponse: HttpServletResponse
     ): ResponseEntity<Any> {
@@ -160,7 +164,7 @@ class AuthController(
 
     @PostMapping("/google")
     fun googleLogin(
-        @RequestBody request: GoogleLoginRequest,
+        @Valid @RequestBody request: GoogleLoginRequest,
         servletRequest: jakarta.servlet.http.HttpServletRequest,
         servletResponse: HttpServletResponse
     ): ResponseEntity<Any> {
@@ -221,7 +225,7 @@ class AuthController(
 
     @PutMapping("/change-password")
     fun changePassword(
-        @RequestBody body: ChangePasswordRequest,
+        @Valid @RequestBody body: ChangePasswordRequest,
         request: jakarta.servlet.http.HttpServletRequest
     ): ResponseEntity<*> {
         return try {
@@ -243,7 +247,7 @@ class AuthController(
 
     @PutMapping("/profile-picture")
     fun updateProfilePicture(
-        @RequestBody body: UpdateProfilePictureRequest,
+        @Valid @RequestBody body: UpdateProfilePictureRequest,
         request: jakarta.servlet.http.HttpServletRequest
     ): ResponseEntity<*> {
         return try {

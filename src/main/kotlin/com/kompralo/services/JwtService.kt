@@ -63,6 +63,10 @@ class JwtService {
             .payload
     }
 
+    fun extractRole(token: String): String? {
+        return extractClaims(token).get("role", String::class.java)
+    }
+
     fun extractEmailFromToken(token: String): String {
         return extractUsername(token)
     }

@@ -1,22 +1,27 @@
 package com.kompralo.exception
 
-import org.springframework.http.HttpStatus
-import org.springframework.web.bind.annotation.ResponseStatus
+sealed class DomainException(message: String) : RuntimeException(message)
 
-/**
- * Excepción cuando no se encuentra un recurso
- */
-@ResponseStatus(HttpStatus.NOT_FOUND)
-class ResourceNotFoundException(message: String) : RuntimeException(message)
+class EntityNotFoundException(entity: String, id: Any) :
+    DomainException("$entity no encontrado: $id")
 
-/**
- * Excepción cuando hay un conflicto (ej: email duplicado)
- */
-@ResponseStatus(HttpStatus.CONFLICT)
-class ResourceAlreadyExistsException(message: String) : RuntimeException(message)
+class UnauthorizedActionException(message: String = "No autorizado") :
+    DomainException(message)
 
-/**
- * Excepción para errores de validación
- */
-@ResponseStatus(HttpStatus.BAD_REQUEST)
-class ValidationException(message: String) : RuntimeException(message)
+class InsufficientStockException(productName: String, requested: Int, available: Int) :
+    DomainException("Stock insuficiente para '$productName'. Disponible: $available, Solicitado: $requested")
+
+class PaymentFailedException(reason: String) :
+    DomainException("Error de pago: $reason")
+
+class BusinessRuleViolationException(message: String) :
+    DomainException(message)
+
+class ResourceAlreadyExistsException(message: String) :
+    DomainException(message)
+
+class ResourceNotFoundException(message: String) :
+    DomainException(message)
+
+class ValidationException(message: String) :
+    DomainException(message)

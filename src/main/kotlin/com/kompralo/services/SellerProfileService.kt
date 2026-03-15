@@ -56,7 +56,7 @@ class SellerProfileService(
 
         return AuthResponse(
             token = token,
-            active = savedUser.isActive,
+            active = savedUser.isUserActive(),
             code = savedUser.code ?: "",
             company_uuid = savedUser.companyUuid ?: "",
             created_at = savedUser.createdAt.toString(),

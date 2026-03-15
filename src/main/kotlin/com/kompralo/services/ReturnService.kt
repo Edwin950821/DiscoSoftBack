@@ -1,9 +1,11 @@
 package com.kompralo.services
 
+import com.kompralo.exception.*
 import com.kompralo.dto.*
 import com.kompralo.model.*
 import com.kompralo.repository.OrderRepository
 import com.kompralo.repository.ReturnRequestRepository
+import com.kompralo.port.NotificationPort
 import com.kompralo.repository.UserRepository
 import org.slf4j.LoggerFactory
 import org.springframework.scheduling.annotation.Scheduled
@@ -17,37 +19,37 @@ class ReturnService(
     private val returnRepository: ReturnRequestRepository,
     private val orderRepository: OrderRepository,
     private val userRepository: UserRepository,
-    private val notificationService: NotificationService
+    private val notificationPort: NotificationPort
 ) {
     private val logger = LoggerFactory.getLogger(ReturnService::class.java)
 
     @Transactional
     fun createReturn(email: String, request: CreateReturnRequest): ReturnResponse {
         val buyer = userRepository.findByEmail(email)
-            .orElseThrow { RuntimeException("Usuario no encontrado") }
+            .orElseThrow { EntityNotFoundException("Usuario", email) }
 
         val order = orderRepository.findById(request.orderId)
-            .orElseThrow { RuntimeException("Pedido no encontrado") }
+            .orElseThrow { EntityNotFoundException("Pedido", request.orderId) }
 
         if (order.buyer.id != buyer.id) {
-            throw RuntimeException("No autorizado para solicitar devolucion de este pedido")
+            throw UnauthorizedActionException("No autorizado para solicitar devolucion de este pedido")
         }
 
         if (order.status != OrderStatus.DELIVERED) {
-            throw RuntimeException("Solo se pueden devolver pedidos entregados")
+            throw BusinessRuleViolationException("Solo se pueden devolver pedidos entregados")
         }
 
         if (order.deliveredAt == null) {
-            throw RuntimeException("No se puede determinar la fecha de entrega")
+            throw BusinessRuleViolationException("No se puede determinar la fecha de entrega")
         }
 
         val daysSinceDelivery = ChronoUnit.DAYS.between(order.deliveredAt, LocalDateTime.now())
         if (daysSinceDelivery > 7) {
-            throw RuntimeException("El plazo de devolucion de 7 dias ha vencido")
+            throw BusinessRuleViolationException("El plazo de devolucion de 7 dias ha vencido")
         }
 
         if (returnRepository.existsByOrderId(request.orderId)) {
-            throw RuntimeException("Ya existe una solicitud de devolucion para este pedido")
+            throw ResourceAlreadyExistsException("Ya existe una solicitud de devolucion para este pedido")
         }
 
         val returnReq = ReturnRequest(
@@ -63,7 +65,7 @@ class ReturnService(
 
         val saved = returnRepository.save(returnReq)
 
-        notificationService.createAndSend(
+        notificationPort.createAndSend(
             userId = order.seller.id!!,
             type = NotificationType.NEW_ORDER,
             title = "Nueva solicitud de devolucion",
@@ -79,13 +81,13 @@ class ReturnService(
 
     fun getMyReturns(email: String): List<ReturnResponse> {
         val buyer = userRepository.findByEmail(email)
-            .orElseThrow { RuntimeException("Usuario no encontrado") }
+            .orElseThrow { EntityNotFoundException("Usuario", email) }
         return returnRepository.findByBuyerOrderByCreatedAtDesc(buyer).map { it.toResponse() }
     }
 
     fun getReturns(email: String, status: ReturnStatus?): List<ReturnResponse> {
         val seller = userRepository.findByEmail(email)
-            .orElseThrow { RuntimeException("Usuario no encontrado") }
+            .orElseThrow { EntityNotFoundException("Usuario", email) }
         val returns = if (status != null) {
             returnRepository.findBySellerAndStatusOrderByCreatedAtDesc(seller, status)
         } else {
@@ -96,13 +98,13 @@ class ReturnService(
 
     fun getReturn(id: Long): ReturnResponse {
         val ret = returnRepository.findById(id)
-            .orElseThrow { RuntimeException("Devolucion no encontrada") }
+            .orElseThrow { EntityNotFoundException("Devolucion", id) }
         return ret.toResponse()
     }
 
     fun getReturnStats(email: String): ReturnStatsResponse {
         val seller = userRepository.findByEmail(email)
-            .orElseThrow { RuntimeException("Usuario no encontrado") }
+            .orElseThrow { EntityNotFoundException("Usuario", email) }
         return ReturnStatsResponse(
             total = returnRepository.countBySeller(seller),
             pending = returnRepository.countBySellerAndStatus(seller, ReturnStatus.PENDING),
@@ -118,16 +120,16 @@ class ReturnService(
     @Transactional
     fun approveReturn(id: Long, email: String, request: ApproveReturnRequest): ReturnResponse {
         val seller = userRepository.findByEmail(email)
-            .orElseThrow { RuntimeException("Usuario no encontrado") }
+            .orElseThrow { EntityNotFoundException("Usuario", email) }
         val ret = returnRepository.findById(id)
-            .orElseThrow { RuntimeException("Devolucion no encontrada") }
+            .orElseThrow { EntityNotFoundException("Devolucion", id) }
 
         if (ret.seller.id != seller.id) {
-            throw RuntimeException("No autorizado")
+            throw UnauthorizedActionException("No autorizado")
         }
 
         if (ret.status != ReturnStatus.PENDING && ret.status != ReturnStatus.IN_REVIEW) {
-            throw RuntimeException("Esta devolucion no puede ser aprobada en estado ${ret.status}")
+            throw BusinessRuleViolationException("Esta devolucion no puede ser aprobada en estado ${ret.status}")
         }
 
         ret.status = ReturnStatus.APPROVED
@@ -137,8 +139,8 @@ class ReturnService(
 
         val saved = returnRepository.save(ret)
 
-        // Notificar al comprador
-        notificationService.createAndSend(
+    
+        notificationPort.createAndSend(
             userId = ret.buyer.id!!,
             type = NotificationType.ORDER_CONFIRMED,
             title = "Devolucion aprobada",
@@ -149,8 +151,7 @@ class ReturnService(
             relatedEntityType = RelatedEntityType.ORDER
         )
 
-        // Notificar a la tienda que debe reembolsar
-        notificationService.createAndSend(
+        notificationPort.createAndSend(
             userId = seller.id!!,
             type = NotificationType.PAYMENT_SUCCESS,
             title = "Debes realizar un reembolso",
@@ -167,12 +168,12 @@ class ReturnService(
     @Transactional
     fun rejectReturn(id: Long, email: String, request: RejectReturnRequest): ReturnResponse {
         val seller = userRepository.findByEmail(email)
-            .orElseThrow { RuntimeException("Usuario no encontrado") }
+            .orElseThrow { EntityNotFoundException("Usuario", email) }
         val ret = returnRepository.findById(id)
-            .orElseThrow { RuntimeException("Devolucion no encontrada") }
+            .orElseThrow { EntityNotFoundException("Devolucion", id) }
 
         if (ret.seller.id != seller.id) {
-            throw RuntimeException("No autorizado")
+            throw UnauthorizedActionException("No autorizado")
         }
 
         ret.status = ReturnStatus.REJECTED
@@ -181,7 +182,7 @@ class ReturnService(
 
         val saved = returnRepository.save(ret)
 
-        notificationService.createAndSend(
+        notificationPort.createAndSend(
             userId = ret.buyer.id!!,
             type = NotificationType.ORDER_CANCELLED,
             title = "Devolucion rechazada",
@@ -198,7 +199,7 @@ class ReturnService(
     @Transactional
     fun adminResolve(id: Long, request: AdminResolveReturnRequest): ReturnResponse {
         val ret = returnRepository.findById(id)
-            .orElseThrow { RuntimeException("Devolucion no encontrada") }
+            .orElseThrow { EntityNotFoundException("Devolucion", id) }
 
         ret.status = request.status
         ret.adminNotes = request.notes
@@ -215,7 +216,7 @@ class ReturnService(
 
         val saved = returnRepository.save(ret)
 
-        notificationService.createAndSend(
+        notificationPort.createAndSend(
             userId = ret.buyer.id!!,
             type = NotificationType.PAYMENT_SUCCESS,
             title = "Devolucion completada",
@@ -232,16 +233,16 @@ class ReturnService(
     @Transactional
     fun escalateReturn(id: Long, email: String): ReturnResponse {
         val buyer = userRepository.findByEmail(email)
-            .orElseThrow { RuntimeException("Usuario no encontrado") }
+            .orElseThrow { EntityNotFoundException("Usuario", email) }
         val ret = returnRepository.findById(id)
-            .orElseThrow { RuntimeException("Devolucion no encontrada") }
+            .orElseThrow { EntityNotFoundException("Devolucion", id) }
 
         if (ret.buyer.id != buyer.id) {
-            throw RuntimeException("No autorizado")
+            throw UnauthorizedActionException("No autorizado")
         }
 
         if (ret.status != ReturnStatus.REJECTED) {
-            throw RuntimeException("Solo se pueden escalar devoluciones rechazadas")
+            throw BusinessRuleViolationException("Solo se pueden escalar devoluciones rechazadas")
         }
 
         ret.status = ReturnStatus.ESCALATED
@@ -249,7 +250,7 @@ class ReturnService(
 
         val saved = returnRepository.save(ret)
 
-        notificationService.createAndSend(
+        notificationPort.createAndSend(
             userId = ret.seller.id!!,
             type = NotificationType.ORDER_CANCELLED,
             title = "Devolucion escalada al administrador",
@@ -266,16 +267,16 @@ class ReturnService(
     @Transactional
     fun markRefundIssued(id: Long, email: String, request: MarkRefundIssuedRequest): ReturnResponse {
         val seller = userRepository.findByEmail(email)
-            .orElseThrow { RuntimeException("Usuario no encontrado") }
+            .orElseThrow { EntityNotFoundException("Usuario", email) }
         val ret = returnRepository.findById(id)
-            .orElseThrow { RuntimeException("Devolucion no encontrada") }
+            .orElseThrow { EntityNotFoundException("Devolucion", id) }
 
         if (ret.seller.id != seller.id) {
-            throw RuntimeException("No autorizado")
+            throw UnauthorizedActionException("No autorizado")
         }
 
         if (ret.status != ReturnStatus.APPROVED) {
-            throw RuntimeException("Solo se puede marcar reembolso en devoluciones aprobadas (estado actual: ${ret.status})")
+            throw BusinessRuleViolationException("Solo se puede marcar reembolso en devoluciones aprobadas (estado actual: ${ret.status})")
         }
 
         ret.status = ReturnStatus.REFUND_ISSUED
@@ -284,7 +285,7 @@ class ReturnService(
 
         val saved = returnRepository.save(ret)
 
-        notificationService.createAndSend(
+        notificationPort.createAndSend(
             userId = ret.buyer.id!!,
             type = NotificationType.PAYMENT_SUCCESS,
             title = "Reembolso enviado",
@@ -301,23 +302,22 @@ class ReturnService(
     @Transactional
     fun confirmRefundReceived(id: Long, email: String): ReturnResponse {
         val buyer = userRepository.findByEmail(email)
-            .orElseThrow { RuntimeException("Usuario no encontrado") }
+            .orElseThrow { EntityNotFoundException("Usuario", email) }
         val ret = returnRepository.findById(id)
-            .orElseThrow { RuntimeException("Devolucion no encontrada") }
+            .orElseThrow { EntityNotFoundException("Devolucion", id) }
 
         if (ret.buyer.id != buyer.id) {
-            throw RuntimeException("No autorizado")
+            throw UnauthorizedActionException("No autorizado")
         }
 
         if (ret.status != ReturnStatus.REFUND_ISSUED) {
-            throw RuntimeException("No se puede confirmar reembolso en estado ${ret.status}")
+            throw BusinessRuleViolationException("No se puede confirmar reembolso en estado ${ret.status}")
         }
 
         ret.status = ReturnStatus.COMPLETED
         ret.refundConfirmedAt = LocalDateTime.now()
         ret.resolvedAt = LocalDateTime.now()
 
-        // Marcar la orden como reembolsada
         val order = ret.order
         order.status = OrderStatus.REFUNDED
         order.paymentStatus = "REFUNDED"
@@ -325,8 +325,7 @@ class ReturnService(
 
         val saved = returnRepository.save(ret)
 
-        // Notificar a la tienda
-        notificationService.createAndSend(
+        notificationPort.createAndSend(
             userId = ret.seller.id!!,
             type = NotificationType.PAYMENT_SUCCESS,
             title = "Reembolso confirmado",
@@ -355,7 +354,7 @@ class ReturnService(
             ret.escalatedAt = LocalDateTime.now()
             returnRepository.save(ret)
 
-            notificationService.createAndSend(
+            notificationPort.createAndSend(
                 userId = ret.buyer.id!!,
                 type = NotificationType.ORDER_CONFIRMED,
                 title = "Devolucion escalada automaticamente",
@@ -366,7 +365,7 @@ class ReturnService(
                 relatedEntityType = RelatedEntityType.ORDER
             )
 
-            notificationService.createAndSend(
+            notificationPort.createAndSend(
                 userId = ret.seller.id!!,
                 type = NotificationType.ORDER_CANCELLED,
                 title = "Devolucion escalada por inactividad",

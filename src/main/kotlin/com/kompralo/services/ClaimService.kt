@@ -1,9 +1,11 @@
 package com.kompralo.services
 
+import com.kompralo.exception.*
 import com.kompralo.dto.*
 import com.kompralo.model.*
 import com.kompralo.repository.OrderRepository
 import com.kompralo.repository.ShippingClaimRepository
+import com.kompralo.port.NotificationPort
 import com.kompralo.repository.UserRepository
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -16,27 +18,27 @@ class ClaimService(
     private val claimRepository: ShippingClaimRepository,
     private val orderRepository: OrderRepository,
     private val userRepository: UserRepository,
-    private val notificationService: NotificationService
+    private val notificationPort: NotificationPort
 ) {
 
     @Transactional
     fun createClaim(email: String, request: CreateClaimRequest): ClaimResponse {
         val buyer = userRepository.findByEmail(email)
-            .orElseThrow { RuntimeException("Usuario no encontrado") }
+            .orElseThrow { EntityNotFoundException("Usuario", email) }
 
         val order = orderRepository.findById(request.orderId)
-            .orElseThrow { RuntimeException("Pedido no encontrado") }
+            .orElseThrow { EntityNotFoundException("Pedido", request.orderId) }
 
         if (order.buyer.id != buyer.id) {
-            throw RuntimeException("No autorizado para reclamar este pedido")
+            throw UnauthorizedActionException("No autorizado para reclamar este pedido")
         }
 
         if (order.status != OrderStatus.SHIPPED) {
-            throw RuntimeException("Solo se pueden reclamar pedidos en estado SHIPPED")
+            throw BusinessRuleViolationException("Solo se pueden reclamar pedidos en estado SHIPPED")
         }
 
         if (claimRepository.existsByOrderId(request.orderId)) {
-            throw RuntimeException("Ya existe un reclamo para este pedido")
+            throw ResourceAlreadyExistsException("Ya existe un reclamo para este pedido")
         }
 
         val claim = ShippingClaim(
@@ -49,7 +51,7 @@ class ClaimService(
 
         val saved = claimRepository.save(claim)
 
-        notificationService.createAndSend(
+        notificationPort.createAndSend(
             userId = order.seller.id!!,
             type = NotificationType.NEW_ORDER,
             title = "Nuevo reclamo por retraso",
@@ -65,13 +67,13 @@ class ClaimService(
 
     fun getMyClaims(email: String): List<ClaimResponse> {
         val buyer = userRepository.findByEmail(email)
-            .orElseThrow { RuntimeException("Usuario no encontrado") }
+            .orElseThrow { EntityNotFoundException("Usuario", email) }
         return claimRepository.findByBuyerOrderByCreatedAtDesc(buyer).map { it.toResponse() }
     }
 
     fun getClaims(email: String, status: ClaimStatus?): List<ClaimResponse> {
         val seller = userRepository.findByEmail(email)
-            .orElseThrow { RuntimeException("Usuario no encontrado") }
+            .orElseThrow { EntityNotFoundException("Usuario", email) }
         val claims = if (status != null) {
             claimRepository.findBySellerAndStatusOrderByCreatedAtDesc(seller, status)
         } else {
@@ -82,13 +84,13 @@ class ClaimService(
 
     fun getClaim(id: Long): ClaimResponse {
         val claim = claimRepository.findById(id)
-            .orElseThrow { RuntimeException("Reclamo no encontrado") }
+            .orElseThrow { EntityNotFoundException("Reclamo", id) }
         return claim.toResponse()
     }
 
     fun getClaimStats(email: String): ClaimStatsResponse {
         val seller = userRepository.findByEmail(email)
-            .orElseThrow { RuntimeException("Usuario no encontrado") }
+            .orElseThrow { EntityNotFoundException("Usuario", email) }
         return ClaimStatsResponse(
             total = claimRepository.countBySeller(seller),
             open = claimRepository.countBySellerAndStatus(seller, ClaimStatus.OPEN),
@@ -102,12 +104,12 @@ class ClaimService(
     @Transactional
     fun extendClaim(id: Long, email: String): ClaimResponse {
         val buyer = userRepository.findByEmail(email)
-            .orElseThrow { RuntimeException("Usuario no encontrado") }
+            .orElseThrow { EntityNotFoundException("Usuario", email) }
         val claim = claimRepository.findById(id)
-            .orElseThrow { RuntimeException("Reclamo no encontrado") }
+            .orElseThrow { EntityNotFoundException("Reclamo", id) }
 
         if (claim.buyer.id != buyer.id) {
-            throw RuntimeException("No autorizado")
+            throw UnauthorizedActionException("No autorizado")
         }
 
         claim.status = ClaimStatus.EXTENDED
@@ -116,7 +118,7 @@ class ClaimService(
 
         val saved = claimRepository.save(claim)
 
-        notificationService.createAndSend(
+        notificationPort.createAndSend(
             userId = claim.seller.id!!,
             type = NotificationType.ORDER_CONFIRMED,
             title = "Reclamo extendido",
@@ -133,12 +135,12 @@ class ClaimService(
     @Transactional
     fun requestRefund(id: Long, email: String): ClaimResponse {
         val buyer = userRepository.findByEmail(email)
-            .orElseThrow { RuntimeException("Usuario no encontrado") }
+            .orElseThrow { EntityNotFoundException("Usuario", email) }
         val claim = claimRepository.findById(id)
-            .orElseThrow { RuntimeException("Reclamo no encontrado") }
+            .orElseThrow { EntityNotFoundException("Reclamo", id) }
 
         if (claim.buyer.id != buyer.id) {
-            throw RuntimeException("No autorizado")
+            throw UnauthorizedActionException("No autorizado")
         }
 
         claim.status = ClaimStatus.RESOLVED
@@ -152,7 +154,7 @@ class ClaimService(
 
         val saved = claimRepository.save(claim)
 
-        notificationService.createAndSend(
+        notificationPort.createAndSend(
             userId = claim.seller.id!!,
             type = NotificationType.ORDER_CANCELLED,
             title = "Reembolso solicitado por reclamo",
@@ -163,7 +165,7 @@ class ClaimService(
             relatedEntityType = RelatedEntityType.ORDER
         )
 
-        notificationService.createAndSend(
+        notificationPort.createAndSend(
             userId = buyer.id!!,
             type = NotificationType.PAYMENT_SUCCESS,
             title = "Reembolso en proceso",
@@ -180,12 +182,12 @@ class ClaimService(
     @Transactional
     fun storeRespond(id: Long, email: String, request: StoreRespondClaimRequest): ClaimResponse {
         val seller = userRepository.findByEmail(email)
-            .orElseThrow { RuntimeException("Usuario no encontrado") }
+            .orElseThrow { EntityNotFoundException("Usuario", email) }
         val claim = claimRepository.findById(id)
-            .orElseThrow { RuntimeException("Reclamo no encontrado") }
+            .orElseThrow { EntityNotFoundException("Reclamo", id) }
 
         if (claim.seller.id != seller.id) {
-            throw RuntimeException("No autorizado")
+            throw UnauthorizedActionException("No autorizado")
         }
 
         claim.storeResponse = request.response
@@ -194,7 +196,7 @@ class ClaimService(
 
         val saved = claimRepository.save(claim)
 
-        notificationService.createAndSend(
+        notificationPort.createAndSend(
             userId = claim.buyer.id!!,
             type = NotificationType.ORDER_CONFIRMED,
             title = "La tienda respondio a tu reclamo",
@@ -211,12 +213,12 @@ class ClaimService(
     @Transactional
     fun adminResolve(id: Long, request: AdminResolveClaimRequest): ClaimResponse {
         val claim = claimRepository.findById(id)
-            .orElseThrow { RuntimeException("Reclamo no encontrado") }
+            .orElseThrow { EntityNotFoundException("Reclamo", id) }
 
         val resolution = try {
             ClaimResolution.valueOf(request.resolution.uppercase())
         } catch (e: IllegalArgumentException) {
-            throw RuntimeException("Resolucion invalida: ${request.resolution}")
+            throw ValidationException("Resolucion invalida: ${request.resolution}")
         }
 
         claim.resolution = resolution
@@ -232,7 +234,7 @@ class ClaimService(
 
         val saved = claimRepository.save(claim)
 
-        notificationService.createAndSend(
+        notificationPort.createAndSend(
             userId = claim.buyer.id!!,
             type = NotificationType.ORDER_CONFIRMED,
             title = "Reclamo resuelto",
@@ -256,7 +258,7 @@ class ClaimService(
             claim.autoResolved = true
             claimRepository.save(claim)
 
-            notificationService.createAndSend(
+            notificationPort.createAndSend(
                 userId = claim.seller.id!!,
                 type = NotificationType.ORDER_CANCELLED,
                 title = "Reclamo escalado automaticamente",

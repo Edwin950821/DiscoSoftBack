@@ -1,5 +1,7 @@
 package com.kompralo.services
 
+import com.kompralo.config.FinanceConfiguration
+import com.kompralo.config.TaxConfiguration
 import com.kompralo.dto.*
 import com.kompralo.model.OrderStatus
 import com.kompralo.model.ProductStatus
@@ -21,13 +23,9 @@ class FinanceService(
     private val orderRepository: OrderRepository,
     private val userRepository: UserRepository,
     private val productRepository: ProductRepository,
+    private val taxConfig: TaxConfiguration,
+    private val financeConfig: FinanceConfiguration,
 ) {
-
-    private val EXPENSE_RATIO = BigDecimal("0.65")
-    private val IVA_RATE = BigDecimal("0.19")
-    private val COGS_RATIO = BigDecimal("0.55")
-    private val SHIPPING_RATIO = BigDecimal("0.08")
-    private val OPERATING_RATIO = BigDecimal("0.05")
 
     private fun findSeller(email: String): User =
         userRepository.findByEmail(email).orElseThrow { RuntimeException("Usuario no encontrado") }
@@ -73,7 +71,7 @@ class FinanceService(
         val refunds = refundsForMonth(seller, now)
         val income = grossIncome.subtract(refunds)
         val prevIncome = revenueForMonth(seller, prev).subtract(refundsForMonth(seller, prev))
-        val expenses = income.multiply(EXPENSE_RATIO).setScale(0, RoundingMode.HALF_UP)
+        val expenses = income.multiply(financeConfig.expenseRatio).setScale(0, RoundingMode.HALF_UP)
         val balance = income.subtract(expenses)
         val pendingOrders = orderRepository.countBySellerAndStatus(seller, OrderStatus.CONFIRMED) +
                 orderRepository.countBySellerAndStatus(seller, OrderStatus.PROCESSING)
@@ -97,7 +95,7 @@ class FinanceService(
         return (5 downTo 0).map { offset ->
             val ym = now.minusMonths(offset.toLong())
             val income = revenueForMonth(seller, ym)
-            val expenses = income.multiply(EXPENSE_RATIO).setScale(0, RoundingMode.HALF_UP)
+            val expenses = income.multiply(financeConfig.expenseRatio).setScale(0, RoundingMode.HALF_UP)
             IncomeExpensePointResponse(
                 month = shortMonth(ym),
                 income = income,
@@ -130,7 +128,7 @@ class FinanceService(
         return (0..3).map { offset ->
             val ym = now.minusMonths(offset.toLong())
             val income = revenueForMonth(seller, ym)
-            val expenses = income.multiply(EXPENSE_RATIO).setScale(0, RoundingMode.HALF_UP)
+            val expenses = income.multiply(financeConfig.expenseRatio).setScale(0, RoundingMode.HALF_UP)
             MonthlyRecordResponse(
                 month = spanishMonth(ym),
                 isCurrent = offset == 0,
@@ -148,12 +146,12 @@ class FinanceService(
         val income = revenueForMonth(seller, now)
         val prevIncome = revenueForMonth(seller, prev)
 
-        val cogs = income.multiply(COGS_RATIO).setScale(0, RoundingMode.HALF_UP)
-        val prevCogs = prevIncome.multiply(COGS_RATIO).setScale(0, RoundingMode.HALF_UP)
-        val shipping = income.multiply(SHIPPING_RATIO).setScale(0, RoundingMode.HALF_UP)
-        val prevShipping = prevIncome.multiply(SHIPPING_RATIO).setScale(0, RoundingMode.HALF_UP)
-        val operating = income.multiply(OPERATING_RATIO).setScale(0, RoundingMode.HALF_UP)
-        val prevOperating = prevIncome.multiply(OPERATING_RATIO).setScale(0, RoundingMode.HALF_UP)
+        val cogs = income.multiply(financeConfig.cogsRatio).setScale(0, RoundingMode.HALF_UP)
+        val prevCogs = prevIncome.multiply(financeConfig.cogsRatio).setScale(0, RoundingMode.HALF_UP)
+        val shipping = income.multiply(financeConfig.shippingRatio).setScale(0, RoundingMode.HALF_UP)
+        val prevShipping = prevIncome.multiply(financeConfig.shippingRatio).setScale(0, RoundingMode.HALF_UP)
+        val operating = income.multiply(financeConfig.operatingRatio).setScale(0, RoundingMode.HALF_UP)
+        val prevOperating = prevIncome.multiply(financeConfig.operatingRatio).setScale(0, RoundingMode.HALF_UP)
         val totalExpenses = cogs.add(shipping).add(operating)
         val margin = if (income > BigDecimal.ZERO)
             income.subtract(totalExpenses).multiply(BigDecimal(100)).divide(income, 1, RoundingMode.HALF_UP).toDouble()
@@ -259,7 +257,7 @@ class FinanceService(
         val seller = findSeller(email)
         val now = YearMonth.now()
         val income = revenueForMonth(seller, now)
-        val ivaCollected = income.multiply(IVA_RATE).setScale(0, RoundingMode.HALF_UP)
+        val ivaCollected = income.multiply(taxConfig.ivaRate).setScale(0, RoundingMode.HALF_UP)
         val ivaPending = ivaCollected.multiply(BigDecimal("0.25")).setScale(0, RoundingMode.HALF_UP)
 
         return TaxSummaryResponse(
@@ -283,7 +281,7 @@ class FinanceService(
         return (5 downTo 0).map { offset ->
             val ym = now.minusMonths(offset.toLong())
             val income = revenueForMonth(seller, ym)
-            val collected = income.multiply(IVA_RATE).setScale(0, RoundingMode.HALF_UP)
+            val collected = income.multiply(taxConfig.ivaRate).setScale(0, RoundingMode.HALF_UP)
             val paid = collected.multiply(BigDecimal("0.80")).setScale(0, RoundingMode.HALF_UP)
             TaxTrendPointResponse(month = shortMonth(ym), collected = collected, paid = paid)
         }

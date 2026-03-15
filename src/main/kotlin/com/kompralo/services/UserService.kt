@@ -73,12 +73,19 @@ class UserService(
             throw ResourceAlreadyExistsException("El email ${request.email} ya está registrado")
         }
 
+        request.username?.let { uname ->
+            userRepository.findByUsername(uname).ifPresent {
+                throw ResourceAlreadyExistsException("El username $uname ya está registrado")
+            }
+        }
+
         val user = User(
             name = request.name,
             email = request.email,
             password = passwordEncoder.encode(request.password),
             role = request.role,
-            isActive = request.isActive
+            isActive = request.isActive,
+            username = request.username
         )
 
         val savedUser = userRepository.save(user)
@@ -106,7 +113,7 @@ class UserService(
             email = request.email ?: user.email,
             password = request.password?.let { passwordEncoder.encode(it) } ?: user.password,
             role = request.role ?: user.role,
-            isActive = request.isActive ?: user.isActive
+            isActive = request.isActive ?: user.isUserActive()
         )
 
         val savedUser = userRepository.save(updatedUser)

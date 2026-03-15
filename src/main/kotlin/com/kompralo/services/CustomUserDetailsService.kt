@@ -23,7 +23,7 @@ class CustomUserDetailsService(
         return org.springframework.security.core.userdetails.User(
             user.email,
             user.password,
-            user.isActive,
+            user.isUserActive(),
             true,
             true,
             true,

@@ -1,7 +1,9 @@
 package com.kompralo.services
 
+import com.kompralo.exception.*
 import com.kompralo.dto.*
 import com.kompralo.model.*
+import com.kompralo.port.NotificationPort
 import com.kompralo.repository.*
 import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
@@ -16,13 +18,13 @@ class InventoryService(
     private val inventoryMovementRepository: InventoryMovementRepository,
     private val productRepository: ProductRepository,
     private val userRepository: UserRepository,
-    private val notificationService: NotificationService,
+    private val notificationPort: NotificationPort,
 ) {
 
     @Transactional(readOnly = true)
     fun getInventoryItems(email: String, search: String?, status: String?): List<InventoryItemResponse> {
         val seller = userRepository.findByEmail(email)
-            .orElseThrow { RuntimeException("Usuario no encontrado") }
+            .orElseThrow { EntityNotFoundException("Usuario", email) }
 
         val restocks = if (!search.isNullOrBlank()) {
             stockRestockRepository.searchBySellerAndText(seller.id!!, search)
@@ -41,13 +43,13 @@ class InventoryService(
     @Transactional(readOnly = true)
     fun getInventoryItem(email: String, restockId: Long): InventoryItemResponse {
         val seller = userRepository.findByEmail(email)
-            .orElseThrow { RuntimeException("Usuario no encontrado") }
+            .orElseThrow { EntityNotFoundException("Usuario", email) }
 
         val restock = stockRestockRepository.findById(restockId)
-            .orElseThrow { RuntimeException("Registro de inventario no encontrado") }
+            .orElseThrow { EntityNotFoundException("Registro de inventario", restockId) }
 
         if (restock.product.seller.id != seller.id) {
-            throw RuntimeException("No autorizado")
+            throw UnauthorizedActionException("No autorizado")
         }
 
         return restock.toInventoryItemResponse()
@@ -56,17 +58,17 @@ class InventoryService(
     @Transactional
     fun adjustStock(email: String, request: AdjustStockRequest): InventoryItemResponse {
         val seller = userRepository.findByEmail(email)
-            .orElseThrow { RuntimeException("Usuario no encontrado") }
+            .orElseThrow { EntityNotFoundException("Usuario", email) }
 
         val restock = stockRestockRepository.findById(request.restockId)
-            .orElseThrow { RuntimeException("Registro de inventario no encontrado") }
+            .orElseThrow { EntityNotFoundException("Registro de inventario", request.restockId) }
 
         if (restock.product.seller.id != seller.id) {
-            throw RuntimeException("No autorizado")
+            throw UnauthorizedActionException("No autorizado")
         }
 
         if (request.quantity == 0) {
-            throw RuntimeException("La cantidad de ajuste no puede ser 0")
+            throw ValidationException("La cantidad de ajuste no puede ser 0")
         }
 
         val product = restock.product
@@ -75,7 +77,7 @@ class InventoryService(
         if (request.quantity < 0) {
             val absQty = -request.quantity
             if (restock.quantityRemaining < absQty) {
-                throw RuntimeException("Stock insuficiente en este lote. Disponible: ${restock.quantityRemaining}")
+                throw BusinessRuleViolationException("Stock insuficiente en este lote. Disponible: ${restock.quantityRemaining}")
             }
             restock.quantityRemaining -= absQty
 
@@ -113,7 +115,7 @@ class InventoryService(
         // Check for low stock alerts
         if (product.stock in 1..10) {
             try {
-                notificationService.createAndSend(
+                notificationPort.createAndSend(
                     userId = seller.id!!,
                     type = NotificationType.LOW_STOCK,
                     title = "Stock bajo",
@@ -130,7 +132,7 @@ class InventoryService(
 
         if (product.stock <= 0) {
             try {
-                notificationService.createAndSend(
+                notificationPort.createAndSend(
                     userId = seller.id!!,
                     type = NotificationType.OUT_OF_STOCK,
                     title = "Producto agotado",
@@ -156,7 +158,7 @@ class InventoryService(
         size: Int,
     ): Map<String, Any> {
         val seller = userRepository.findByEmail(email)
-            .orElseThrow { RuntimeException("Usuario no encontrado") }
+            .orElseThrow { EntityNotFoundException("Usuario", email) }
 
         val pageable = PageRequest.of(page, size)
 

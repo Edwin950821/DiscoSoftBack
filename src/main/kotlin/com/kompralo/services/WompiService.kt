@@ -1,5 +1,6 @@
 package com.kompralo.services
 
+import com.kompralo.exception.*
 import com.kompralo.dto.WompiTransactionData
 import com.kompralo.dto.WompiTransactionResponse
 import com.fasterxml.jackson.databind.DeserializationFeature
@@ -69,20 +70,20 @@ class WompiService(
         val response = httpClient.send(request, HttpResponse.BodyHandlers.ofString())
 
         if (response.statusCode() != 200) {
-            throw RuntimeException("Error al verificar la transaccion de pago")
+            throw PaymentFailedException("Error al verificar la transaccion de pago")
         }
 
         val txResponse = lenientMapper.readValue(response.body(), WompiTransactionResponse::class.java)
         val tx = txResponse.data
 
         if (tx.status != "APPROVED") {
-            throw RuntimeException("La transaccion no fue aprobada. Estado: ${tx.status}")
+            throw PaymentFailedException("La transaccion no fue aprobada. Estado: ${tx.status}")
         }
         if (tx.amountInCents != expectedAmountInCents) {
-            throw RuntimeException("El monto de la transaccion no coincide con el pedido")
+            throw PaymentFailedException("El monto de la transaccion no coincide con el pedido")
         }
         if (tx.reference != reference) {
-            throw RuntimeException("La referencia de la transaccion no coincide")
+            throw PaymentFailedException("La referencia de la transaccion no coincide")
         }
 
         return tx

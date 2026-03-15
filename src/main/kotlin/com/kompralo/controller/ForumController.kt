@@ -6,6 +6,7 @@ import com.kompralo.dto.UpdateForumPostRequest
 import com.kompralo.model.ForumCategory
 import com.kompralo.repository.UserRepository
 import com.kompralo.services.ForumService
+import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
@@ -46,11 +47,11 @@ class ForumController(
         ResponseEntity.ok(forumService.getPostDetail(id, getUser(auth)))
 
     @PostMapping("/api/forum/posts")
-    fun createPost(auth: Authentication, @RequestBody request: CreateForumPostRequest) =
+    fun createPost(auth: Authentication, @Valid @RequestBody request: CreateForumPostRequest) =
         ResponseEntity.status(HttpStatus.CREATED).body(forumService.createPost(request, getUser(auth)))
 
     @PutMapping("/api/forum/posts/{id}")
-    fun updatePost(auth: Authentication, @PathVariable id: Long, @RequestBody request: UpdateForumPostRequest) =
+    fun updatePost(auth: Authentication, @PathVariable id: Long, @Valid @RequestBody request: UpdateForumPostRequest) =
         ResponseEntity.ok(forumService.updatePost(id, request, getUser(auth)))
 
     @DeleteMapping("/api/forum/posts/{id}")
@@ -60,7 +61,7 @@ class ForumController(
     }
 
     @PostMapping("/api/forum/posts/{postId}/replies")
-    fun createReply(auth: Authentication, @PathVariable postId: Long, @RequestBody request: CreateForumReplyRequest) =
+    fun createReply(auth: Authentication, @PathVariable postId: Long, @Valid @RequestBody request: CreateForumReplyRequest) =
         ResponseEntity.status(HttpStatus.CREATED).body(forumService.createReply(postId, request, getUser(auth)))
 
     @DeleteMapping("/api/forum/replies/{replyId}")

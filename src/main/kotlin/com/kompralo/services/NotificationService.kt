@@ -1,5 +1,6 @@
 package com.kompralo.services
 
+import com.kompralo.exception.*
 import com.kompralo.dto.NotificationPageResponse
 import com.kompralo.dto.NotificationResponse
 import com.kompralo.dto.PushNotificationPayload
@@ -10,6 +11,7 @@ import com.kompralo.repository.UserRepository
 import org.slf4j.LoggerFactory
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
+import com.kompralo.port.NotificationPort
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
@@ -19,22 +21,22 @@ class NotificationService(
     private val userRepository: UserRepository,
     private val socketIOService: SocketIOService,
     private val pushNotificationService: PushNotificationService
-) {
+) : NotificationPort {
     private val logger = LoggerFactory.getLogger(NotificationService::class.java)
 
     @Transactional
-    fun createAndSend(
+    override fun createAndSend(
         userId: Long,
         type: NotificationType,
         title: String,
         message: String,
-        priority: String = "medium",
-        actionUrl: String? = null,
-        relatedEntityId: Long? = null,
-        relatedEntityType: RelatedEntityType? = null
+        priority: String,
+        actionUrl: String?,
+        relatedEntityId: Long?,
+        relatedEntityType: RelatedEntityType?
     ): NotificationResponse {
         val user = userRepository.findById(userId)
-            .orElseThrow { RuntimeException("Usuario no encontrado") }
+            .orElseThrow { EntityNotFoundException("Usuario", userId) }
 
         val notification = Notification(
             user = user,
@@ -96,7 +98,7 @@ class NotificationService(
     @Transactional
     fun markAsRead(notificationId: Long, user: User): NotificationResponse {
         val notification = notificationRepository.findByIdAndUser(notificationId, user)
-            ?: throw RuntimeException("Notificacion no encontrada")
+            ?: throw ResourceNotFoundException("Notificacion no encontrada")
         notification.isRead = true
         return notificationRepository.save(notification).toResponse()
     }
@@ -109,7 +111,7 @@ class NotificationService(
     @Transactional
     fun deleteNotification(notificationId: Long, user: User) {
         val notification = notificationRepository.findByIdAndUser(notificationId, user)
-            ?: throw RuntimeException("Notificacion no encontrada")
+            ?: throw ResourceNotFoundException("Notificacion no encontrada")
         notificationRepository.delete(notification)
     }
 

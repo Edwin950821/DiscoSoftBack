@@ -1,7 +1,9 @@
 package com.kompralo.services
 
+import com.kompralo.exception.*
 import com.kompralo.dto.*
 import com.kompralo.model.*
+import com.kompralo.port.NotificationPort
 import com.kompralo.repository.*
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -16,27 +18,27 @@ class StockBatchService(
     private val productRepository: ProductRepository,
     private val userRepository: UserRepository,
     private val inventoryMovementRepository: InventoryMovementRepository,
-    private val notificationService: NotificationService,
+    private val notificationPort: NotificationPort,
     private val supplierRepository: SupplierRepository,
 ) {
 
     @Transactional
     fun createBatch(sellerId: Long, request: BatchRestockRequest): BatchResponse {
         if (request.items.isEmpty()) {
-            throw RuntimeException("El lote debe tener al menos un producto")
+            throw ValidationException("El lote debe tener al menos un producto")
         }
 
         val seller = userRepository.findById(sellerId)
-            .orElseThrow { RuntimeException("Vendedor no encontrado") }
+            .orElseThrow { EntityNotFoundException("Vendedor", sellerId) }
 
         val itemsWithProduct = request.items.map { item ->
             if (item.quantity <= 0) {
-                throw RuntimeException("La cantidad debe ser mayor a 0")
+                throw ValidationException("La cantidad debe ser mayor a 0")
             }
             val product = productRepository.findById(item.productId)
-                .orElseThrow { RuntimeException("Producto ${item.productId} no encontrado") }
+                .orElseThrow { EntityNotFoundException("Producto", item.productId) }
             if (product.seller.id != sellerId) {
-                throw RuntimeException("No autorizado para reabastecer producto ${product.name}")
+                throw UnauthorizedActionException("No autorizado para reabastecer producto ${product.name}")
             }
             Triple(product, item.quantity, item)
         }
@@ -50,9 +52,9 @@ class StockBatchService(
 
         val supplierEntity = request.supplierId?.let { sid ->
             val s = supplierRepository.findById(sid)
-                .orElseThrow { RuntimeException("Proveedor no encontrado") }
+                .orElseThrow { EntityNotFoundException("Proveedor", sid) }
             if (s.seller.id != sellerId) {
-                throw RuntimeException("No autorizado para usar este proveedor")
+                throw UnauthorizedActionException("No autorizado para usar este proveedor")
             }
             s
         }
@@ -124,7 +126,7 @@ class StockBatchService(
         }
 
         try {
-            notificationService.createAndSend(
+            notificationPort.createAndSend(
                 userId = sellerId,
                 type = NotificationType.STOCK_RESTOCKED,
                 title = "Lote de stock guardado",
@@ -170,10 +172,10 @@ class StockBatchService(
     @Transactional(readOnly = true)
     fun getBatchById(sellerId: Long, batchId: Long): BatchResponse {
         val batch = stockBatchRepository.findById(batchId)
-            .orElseThrow { RuntimeException("Lote no encontrado") }
+            .orElseThrow { EntityNotFoundException("Lote", batchId) }
 
         if (batch.seller.id != sellerId) {
-            throw RuntimeException("No autorizado")
+            throw UnauthorizedActionException("No autorizado")
         }
 
         val restocks = stockRestockRepository.findByBatchIdOrderByCreatedAtDesc(batchId)
