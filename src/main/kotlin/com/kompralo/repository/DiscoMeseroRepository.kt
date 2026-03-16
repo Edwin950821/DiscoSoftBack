@@ -11,4 +11,6 @@ interface DiscoMeseroRepository : JpaRepository<DiscoMesero, UUID> {
     fun findAllByOrderByCreadoEnDesc(): List<DiscoMesero>
 
     fun findByActivoTrue(): List<DiscoMesero>
+
+    fun findByUsername(username: String): DiscoMesero?
 }

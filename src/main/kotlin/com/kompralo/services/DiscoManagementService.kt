@@ -94,6 +94,12 @@ class DiscoManagementService(
     fun deleteMesero(id: UUID) {
         val mesero = meseroRepo.findById(id)
             .orElseThrow { RuntimeException("Mesero no encontrado con id: $id") }
+
+        // Also delete the associated auth user
+        if (!mesero.username.isNullOrBlank()) {
+            userRepository.findByUsername(mesero.username).ifPresent { userRepository.delete(it) }
+        }
+
         meseroRepo.delete(mesero)
     }
 

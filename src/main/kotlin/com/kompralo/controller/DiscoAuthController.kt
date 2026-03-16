@@ -95,10 +95,8 @@ class DiscoAuthController(
             val secure = isSecureRequest(servletRequest)
             servletResponse.addCookie(createAuthCookie(accessToken, secure))
 
-            val meseroId = if (user.role == Role.MESERO) {
-                val mesero = meseroRepo.findAllByOrderByCreadoEnDesc()
-                    .firstOrNull { it.nombre.equals(user.name, ignoreCase = true) }
-                mesero?.id?.toString()
+            val meseroId = if (user.role == Role.MESERO && !user.username.isNullOrBlank()) {
+                meseroRepo.findByUsername(user.username!!)?.id?.toString()
             } else null
 
             ResponseEntity.ok(DiscoAuthResponse(
