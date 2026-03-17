@@ -59,6 +59,8 @@ data class DiscoPedidoResponse(
     val total: Int,
     val jornadaFecha: String,
     val nota: String?,
+    val esCortesia: Boolean = false,
+    val promoNombre: String? = null,
     val lineas: List<DiscoLineaPedidoResponse>,
     val creadoEn: String,
     val despachadoEn: String? = null
@@ -76,7 +78,35 @@ data class DiscoCuentaMesaResponse(
     val meseroAvatar: String,
     val jornadaFecha: String,
     val total: Int,
+    val descuentoPromo: Int = 0,
+    val totalConDescuento: Int? = null,
     val estado: String,
     val pedidos: List<DiscoPedidoResponse>,
     val creadoEn: String
+)
+
+data class DiscoResumenDiaResponse(
+    val fecha: String,
+    val totalVentas: Int,
+    val totalBillar: Int,
+    val totalGeneral: Int,
+    val cuentasCerradas: Int,
+    val cuentasAbiertas: Int,
+    val ticketsTotales: Int,
+    val mesasAtendidas: Int,
+    val partidasBillar: Int,
+    val jornadaCerrada: Boolean
+)
+
+data class DiscoResumenJornadaResponse(
+    val id: UUID,
+    val fecha: String,
+    val totalVentas: Int,
+    val totalBillar: Int,
+    val totalGeneral: Int,
+    val cuentasCerradas: Int,
+    val ticketsTotales: Int,
+    val mesasAtendidas: Int,
+    val partidasBillar: Int,
+    val cerradoEn: String
 )

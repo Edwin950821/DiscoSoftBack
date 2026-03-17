@@ -34,6 +34,17 @@ data class DiscoPedido(
 
     val nota: String? = null,
 
+    @Column(name = "es_cortesia", nullable = false)
+    val esCortesia: Boolean = false,
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "promo_id")
+    val promo: DiscoPromocion? = null,
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "cuenta_id")
+    var cuenta: DiscoCuentaMesa? = null,
+
     @Column(name = "creado_en", nullable = false, updatable = false)
     val creadoEn: LocalDateTime = LocalDateTime.now(),
 

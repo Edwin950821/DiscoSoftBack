@@ -16,6 +16,9 @@ class DiscoPedidoService(
     private val meseroRepo: DiscoMeseroRepository,
     private val productoRepo: DiscoProductoRepository,
     private val cuentaRepo: DiscoCuentaMesaRepository,
+    private val promocionRepo: DiscoPromocionRepository,
+    private val partidaBillarRepo: DiscoPartidaBillarRepository,
+    private val jornadaDiariaRepo: DiscoJornadaDiariaRepository,
     private val socketIO: SocketIOService
 ) {
 
@@ -44,10 +47,10 @@ class DiscoPedidoService(
                 nombreCliente = req.nombreCliente,
                 jornadaFecha = hoy
             )
-            cuentaRepo.save(cuenta)
+            cuentaRepo.saveAndFlush(cuenta)
         }
 
-        val response = mesaRepo.save(mesa).toResponse()
+        val response = mesaRepo.saveAndFlush(mesa).toResponse()
         socketIO.sendToAdmin("mesa_ocupada", response)
         socketIO.sendToAllMeseros("mesa_actualizada", response)
         return response
@@ -76,12 +79,16 @@ class DiscoPedidoService(
 
         val ticketDia = (pedidoRepo.countByJornadaFecha(hoy) + 1).toInt()
 
+        val cuenta = cuentaRepo.findByMesaIdAndEstado(mesa.id!!, "ABIERTA")
+            ?: throw IllegalStateException("No hay cuenta abierta para esta mesa")
+
         val pedido = DiscoPedido(
             mesa = mesa,
             mesero = mesero,
             ticketDia = ticketDia,
             jornadaFecha = hoy,
-            nota = req.nota
+            nota = req.nota,
+            cuenta = cuenta
         )
 
         var totalPedido = 0
@@ -103,7 +110,8 @@ class DiscoPedidoService(
         }
 
         pedido.total = totalPedido
-        val response = pedidoRepo.save(pedido).toResponse()
+        val saved = pedidoRepo.saveAndFlush(pedido)
+        val response = saved.toResponse()
         socketIO.sendToAdmin("nuevo_pedido", response)
         return response
     }
@@ -120,15 +128,115 @@ class DiscoPedidoService(
         pedido.estado = "DESPACHADO"
         pedido.despachadoEn = LocalDateTime.now()
 
-        val cuenta = cuentaRepo.findByMesaIdAndEstado(pedido.mesa.id!!, "ABIERTA")
+        val cuenta = pedido.cuenta
+            ?: cuentaRepo.findByMesaIdAndEstado(pedido.mesa.id!!, "ABIERTA")
             ?: throw RuntimeException("No hay cuenta abierta para esta mesa")
-        cuenta.total += pedido.total
-        cuentaRepo.save(cuenta)
 
-        val response = pedidoRepo.save(pedido).toResponse()
+        if (!pedido.esCortesia) {
+            cuenta.total += pedido.total
+        }
+        cuentaRepo.saveAndFlush(cuenta)
+
+        val response = pedidoRepo.saveAndFlush(pedido).toResponse()
         socketIO.sendToMesero(pedido.mesero.id.toString(), "pedido_despachado", response)
         socketIO.sendToAdmin("pedido_despachado", response)
+
+        if (!pedido.esCortesia) {
+            aplicarPromosAutomaticas(pedido.mesa, pedido.mesero, cuenta)
+        }
+
         return response
+    }
+
+    private fun aplicarPromosAutomaticas(mesa: DiscoMesa, mesero: DiscoMesero, cuenta: DiscoCuentaMesa) {
+        val promosActivas = promocionRepo.findByActivaTrue()
+        if (promosActivas.isEmpty()) return
+
+        val pedidosRegulares = pedidoRepo.findByCuentaIdAndEsCortesiaFalseAndEstado(
+            cuenta.id!!, "DESPACHADO"
+        )
+        val cortesiasExistentes = pedidoRepo.findByCuentaIdAndEsCortesiaTrueAndEstadoNot(
+            cuenta.id!!, "CANCELADO"
+        )
+
+        val productosAcumulados = mutableMapOf<UUID, Int>()
+        pedidosRegulares.forEach { p ->
+            p.lineas.forEach { l ->
+                val pid = l.producto.id!!
+                productosAcumulados[pid] = (productosAcumulados[pid] ?: 0) + l.cantidad
+            }
+        }
+
+        var descuentoTotal = 0
+
+        promosActivas.forEach { promo ->
+            val compraIds = promo.compraProductoIds.split(",").map { UUID.fromString(it.trim()) }
+            val regaloId = promo.regaloProducto.id!!
+            val esMismoProducto = compraIds.size == 1 && compraIds[0] == regaloId
+
+            val totalCompra = compraIds.sumOf { productosAcumulados[it] ?: 0 }
+            if (totalCompra == 0) return@forEach
+
+            val cortesiasYaDadas = cortesiasExistentes
+                .filter { it.promo?.id == promo.id }
+                .flatMap { it.lineas }
+                .sumOf { it.cantidad }
+
+            val cortesiasCalificadas: Int
+            if (esMismoProducto) {
+                val grupo = promo.compraCantidad + promo.regaloCantidad
+                val sets = totalCompra / grupo
+                cortesiasCalificadas = sets * promo.regaloCantidad
+            } else {
+                val sets = totalCompra / promo.compraCantidad
+                cortesiasCalificadas = sets * promo.regaloCantidad
+            }
+
+            val nuevasCortesias = cortesiasCalificadas - cortesiasYaDadas
+            if (nuevasCortesias <= 0) return@forEach
+
+            val ticketDia = (pedidoRepo.countByJornadaFecha(cuenta.jornadaFecha) + 1).toInt()
+
+            val cortesiaPedido = DiscoPedido(
+                mesa = mesa,
+                mesero = mesero,
+                ticketDia = ticketDia,
+                jornadaFecha = cuenta.jornadaFecha,
+                estado = "DESPACHADO",
+                despachadoEn = LocalDateTime.now(),
+                esCortesia = true,
+                promo = promo,
+                nota = "Cortesia: ${promo.nombre}",
+                cuenta = cuenta
+            )
+
+            val regaloProducto = promo.regaloProducto
+            val lineaTotal = regaloProducto.precio * nuevasCortesias
+
+            val linea = DiscoLineaPedido(
+                producto = regaloProducto,
+                nombre = regaloProducto.nombre,
+                precioUnitario = regaloProducto.precio,
+                cantidad = nuevasCortesias,
+                total = lineaTotal
+            )
+            linea.pedido = cortesiaPedido
+            cortesiaPedido.lineas.add(linea)
+            cortesiaPedido.total = lineaTotal
+
+            pedidoRepo.saveAndFlush(cortesiaPedido)
+            descuentoTotal += lineaTotal
+
+            val cortesiaResponse = cortesiaPedido.toResponse()
+            socketIO.sendToAdmin("cortesia_aplicada", cortesiaResponse)
+            socketIO.sendToMesero(mesero.id.toString(), "cortesia_aplicada", cortesiaResponse)
+        }
+
+        if (descuentoTotal > 0) {
+            val totalCortesias = cortesiasExistentes.sumOf { it.total } + descuentoTotal
+            cuenta.descuentoPromo = totalCortesias
+            cuentaRepo.saveAndFlush(cuenta)
+        }
     }
 
     @Transactional
@@ -141,20 +249,98 @@ class DiscoPedidoService(
         }
 
         if (pedido.estado == "DESPACHADO") {
-            val cuenta = cuentaRepo.findByMesaIdAndEstado(pedido.mesa.id!!, "ABIERTA")
+            val cuenta = pedido.cuenta?.takeIf { it.estado == "ABIERTA" }
+                ?: cuentaRepo.findByMesaIdAndEstado(pedido.mesa.id!!, "ABIERTA")
             if (cuenta != null) {
-                cuenta.total -= pedido.total
-                if (cuenta.total < 0) cuenta.total = 0
-                cuentaRepo.save(cuenta)
+                if (!pedido.esCortesia) {
+                    cuenta.total -= pedido.total
+                    if (cuenta.total < 0) cuenta.total = 0
+                }
+
+                pedido.estado = "CANCELADO"
+                pedido.canceladoEn = LocalDateTime.now()
+                pedidoRepo.saveAndFlush(pedido)
+
+                if (!pedido.esCortesia) {
+                    recalcularCortesias(pedido.mesa, pedido.mesero, cuenta)
+                } else {
+                    val cortesiasVivas = pedidoRepo.findByCuentaIdAndEsCortesiaTrueAndEstadoNot(
+                        cuenta.id!!, "CANCELADO"
+                    )
+                    cuenta.descuentoPromo = cortesiasVivas.sumOf { it.total }
+                }
+                cuentaRepo.saveAndFlush(cuenta)
+            } else {
+                pedido.estado = "CANCELADO"
+                pedido.canceladoEn = LocalDateTime.now()
+                pedidoRepo.saveAndFlush(pedido)
             }
+        } else {
+            pedido.estado = "CANCELADO"
+            pedido.canceladoEn = LocalDateTime.now()
+            pedidoRepo.saveAndFlush(pedido)
         }
 
-        pedido.estado = "CANCELADO"
-        pedido.canceladoEn = LocalDateTime.now()
-        val response = pedidoRepo.save(pedido).toResponse()
+        val response = pedido.toResponse()
         socketIO.sendToMesero(pedido.mesero.id.toString(), "pedido_cancelado", response)
         socketIO.sendToAdmin("pedido_cancelado", response)
         return response
+    }
+
+    private fun recalcularCortesias(mesa: DiscoMesa, mesero: DiscoMesero, cuenta: DiscoCuentaMesa) {
+        val promosActivas = promocionRepo.findByActivaTrue()
+        if (promosActivas.isEmpty()) return
+
+        val pedidosRegulares = pedidoRepo.findByCuentaIdAndEsCortesiaFalseAndEstado(
+            cuenta.id!!, "DESPACHADO"
+        )
+        val cortesiasVivas = pedidoRepo.findByCuentaIdAndEsCortesiaTrueAndEstadoNot(
+            cuenta.id!!, "CANCELADO"
+        )
+
+        val productosAcumulados = mutableMapOf<UUID, Int>()
+        pedidosRegulares.forEach { p ->
+            p.lineas.forEach { l ->
+                val pid = l.producto.id!!
+                productosAcumulados[pid] = (productosAcumulados[pid] ?: 0) + l.cantidad
+            }
+        }
+
+        promosActivas.forEach { promo ->
+            val compraIds = promo.compraProductoIds.split(",").map { UUID.fromString(it.trim()) }
+            val regaloId = promo.regaloProducto.id!!
+            val esMismoProducto = compraIds.size == 1 && compraIds[0] == regaloId
+
+            val totalCompra = compraIds.sumOf { productosAcumulados[it] ?: 0 }
+
+            val cortesiasCalificadas: Int = if (esMismoProducto) {
+                val grupo = promo.compraCantidad + promo.regaloCantidad
+                (totalCompra / grupo) * promo.regaloCantidad
+            } else {
+                (totalCompra / promo.compraCantidad) * promo.regaloCantidad
+            }
+
+            val cortesiasDeEstaPromo = cortesiasVivas.filter { it.promo?.id == promo.id }
+            val cortesiasActuales = cortesiasDeEstaPromo.flatMap { it.lineas }.sumOf { it.cantidad }
+
+            if (cortesiasActuales > cortesiasCalificadas) {
+                val sobran = cortesiasActuales - cortesiasCalificadas
+                var porCancelar = sobran
+                for (c in cortesiasDeEstaPromo.reversed()) {
+                    if (porCancelar <= 0) break
+                    c.estado = "CANCELADO"
+                    c.canceladoEn = LocalDateTime.now()
+                    pedidoRepo.saveAndFlush(c)
+                    porCancelar -= c.lineas.sumOf { it.cantidad }
+                    socketIO.sendToAdmin("cortesia_cancelada", c.toResponse())
+                }
+            }
+        }
+
+        val cortesiasFinales = pedidoRepo.findByCuentaIdAndEsCortesiaTrueAndEstadoNot(
+            cuenta.id!!, "CANCELADO"
+        )
+        cuenta.descuentoPromo = cortesiasFinales.sumOf { it.total }
     }
 
     @Transactional
@@ -190,14 +376,31 @@ class DiscoPedidoService(
         pedido.total = nuevoTotal
 
         if (pedido.estado == "DESPACHADO") {
-            val cuenta = cuentaRepo.findByMesaIdAndEstado(pedido.mesa.id!!, "ABIERTA")
+            val cuenta = pedido.cuenta?.takeIf { it.estado == "ABIERTA" }
+                ?: cuentaRepo.findByMesaIdAndEstado(pedido.mesa.id!!, "ABIERTA")
             if (cuenta != null) {
                 cuenta.total = cuenta.total - totalAnterior + nuevoTotal
-                cuentaRepo.save(cuenta)
+                cuentaRepo.saveAndFlush(cuenta)
             }
         }
 
-        return pedidoRepo.save(pedido).toResponse()
+        return pedidoRepo.saveAndFlush(pedido).toResponse()
+    }
+
+    @Transactional
+    fun aplicarPromos(mesaId: UUID): DiscoCuentaMesaResponse {
+        val cuenta = cuentaRepo.findByMesaIdAndEstado(mesaId, "ABIERTA")
+            ?: throw RuntimeException("No hay cuenta abierta para esta mesa")
+
+        aplicarPromosAutomaticas(cuenta.mesa, cuenta.mesero, cuenta)
+
+        val pedidosRegulares = pedidoRepo.findByCuentaIdAndEsCortesiaFalseAndEstado(
+            cuenta.id!!, "DESPACHADO"
+        )
+        val pedidosCortesia = pedidoRepo.findByCuentaIdAndEsCortesiaTrueAndEstadoNot(
+            cuenta.id!!, "CANCELADO"
+        )
+        return cuenta.toResponse(pedidosRegulares + pedidosCortesia)
     }
 
     @Transactional
@@ -205,17 +408,24 @@ class DiscoPedidoService(
         val cuenta = cuentaRepo.findByMesaIdAndEstado(mesaId, "ABIERTA")
             ?: throw RuntimeException("No hay cuenta abierta para esta mesa")
 
+        val pedidosRegulares = pedidoRepo.findByCuentaIdAndEsCortesiaFalseAndEstado(
+            cuenta.id!!, "DESPACHADO"
+        )
+        val pedidosCortesia = pedidoRepo.findByCuentaIdAndEsCortesiaTrueAndEstadoNot(
+            cuenta.id!!, "CANCELADO"
+        )
+
+        val totalFromPedidos = pedidosRegulares.sumOf { it.total }
+        cuenta.total = totalFromPedidos
+        cuenta.descuentoPromo = pedidosCortesia.sumOf { it.total }
         cuenta.estado = "PAGADA"
         cuenta.pagadaEn = LocalDateTime.now()
-        cuentaRepo.save(cuenta)
+        cuentaRepo.saveAndFlush(cuenta)
 
         liberarMesa(mesaId)
 
-        val pedidos = pedidoRepo.findByMesaIdAndJornadaFechaAndEstado(
-            mesaId, cuenta.jornadaFecha, "DESPACHADO"
-        )
-
-        val response = cuenta.toResponse(pedidos)
+        val todosPedidos = pedidosRegulares + pedidosCortesia
+        val response = cuenta.toResponse(todosPedidos)
         socketIO.sendToMesero(cuenta.mesero.id.toString(), "cuenta_pagada", response)
         socketIO.sendToAdmin("cuenta_pagada", response)
         socketIO.sendToAllMeseros("mesa_actualizada", DiscoMesaResponse(
@@ -242,19 +452,90 @@ class DiscoPedidoService(
     @Transactional(readOnly = true)
     fun getCuentaMesa(mesaId: UUID): DiscoCuentaMesaResponse? {
         val cuenta = cuentaRepo.findByMesaIdAndEstado(mesaId, "ABIERTA") ?: return null
-        val pedidos = pedidoRepo.findByMesaIdAndJornadaFechaAndEstado(
-            mesaId, cuenta.jornadaFecha, "DESPACHADO"
+        val pedidosRegulares = pedidoRepo.findByCuentaIdAndEsCortesiaFalseAndEstado(
+            cuenta.id!!, "DESPACHADO"
         )
-        return cuenta.toResponse(pedidos)
+        val pedidosCortesia = pedidoRepo.findByCuentaIdAndEsCortesiaTrueAndEstadoNot(
+            cuenta.id!!, "CANCELADO"
+        )
+        return cuenta.toResponse(pedidosRegulares + pedidosCortesia)
+    }
+
+    @Transactional(readOnly = true)
+    fun getResumenDia(): DiscoResumenDiaResponse {
+        val fecha = hoy
+
+        val cuentasHoy = cuentaRepo.findByJornadaFechaOrderByCreadoEnDesc(fecha)
+        val cuentasPagadas = cuentasHoy.filter { it.estado == "PAGADA" }
+        val cuentasAbiertas = cuentasHoy.filter { it.estado == "ABIERTA" }
+
+        val totalVentas = cuentasPagadas.sumOf { it.total - it.descuentoPromo }
+
+        val ticketsTotales = pedidoRepo.countByJornadaFecha(fecha).toInt()
+        val mesasAtendidas = cuentasHoy.map { it.mesa.id }.distinct().size
+
+        val partidasHoy = partidaBillarRepo.findByJornadaFechaOrderByCreadoEnDesc(fecha)
+        val partidasFinalizadas = partidasHoy.filter { it.estado == "FINALIZADO" }
+        val totalBillar = partidasFinalizadas.sumOf { it.total ?: 0 }
+
+        val jornadaCerrada = jornadaDiariaRepo.findByFecha(fecha) != null
+
+        return DiscoResumenDiaResponse(
+            fecha = fecha,
+            totalVentas = totalVentas,
+            totalBillar = totalBillar,
+            totalGeneral = totalVentas + totalBillar,
+            cuentasCerradas = cuentasPagadas.size,
+            cuentasAbiertas = cuentasAbiertas.size,
+            ticketsTotales = ticketsTotales,
+            mesasAtendidas = mesasAtendidas,
+            partidasBillar = partidasFinalizadas.size,
+            jornadaCerrada = jornadaCerrada
+        )
+    }
+
+    @Transactional(readOnly = true)
+    fun getHistorialJornadas(): List<DiscoResumenJornadaResponse> =
+        jornadaDiariaRepo.findAllByOrderByCerradoEnDesc().map { it.toResponse() }
+
+    @Transactional
+    fun cerrarJornada(): DiscoResumenJornadaResponse {
+        val fecha = hoy
+
+        jornadaDiariaRepo.findByFecha(fecha)?.let {
+            throw IllegalStateException("La jornada de hoy ya fue cerrada")
+        }
+
+        val cuentasAbiertas = cuentaRepo.findByJornadaFechaOrderByCreadoEnDesc(fecha)
+            .filter { it.estado == "ABIERTA" }
+        if (cuentasAbiertas.isNotEmpty()) {
+            throw IllegalStateException("Hay ${cuentasAbiertas.size} cuenta(s) abierta(s). Ciérrelas antes de cerrar la jornada.")
+        }
+
+        val resumen = getResumenDia()
+
+        val jornada = DiscoJornadaDiaria(
+            fecha = fecha,
+            totalVentas = resumen.totalVentas,
+            totalBillar = resumen.totalBillar,
+            totalGeneral = resumen.totalGeneral,
+            cuentasCerradas = resumen.cuentasCerradas,
+            ticketsTotales = resumen.ticketsTotales,
+            mesasAtendidas = resumen.mesasAtendidas,
+            partidasBillar = resumen.partidasBillar
+        )
+
+        val saved = jornadaDiariaRepo.saveAndFlush(jornada)
+        val response = saved.toResponse()
+        socketIO.broadcast("jornada_cerrada", response)
+        return response
     }
 
     @Transactional(readOnly = true)
     fun getCuentasHoy(): List<DiscoCuentaMesaResponse> {
         val cuentas = cuentaRepo.findByJornadaFechaOrderByCreadoEnDesc(hoy)
         return cuentas.map { cuenta ->
-            val pedidos = pedidoRepo.findByMesaIdAndJornadaFechaAndEstado(
-                cuenta.mesa.id!!, cuenta.jornadaFecha, "DESPACHADO"
-            )
+            val pedidos = pedidoRepo.findByCuentaIdAndEstado(cuenta.id!!, "DESPACHADO")
             cuenta.toResponse(pedidos)
         }
     }
@@ -273,6 +554,8 @@ class DiscoPedidoService(
         total = total,
         jornadaFecha = jornadaFecha,
         nota = nota,
+        esCortesia = esCortesia,
+        promoNombre = promo?.nombre,
         lineas = lineas.map { it.toResponse() },
         creadoEn = creadoEn.toString(),
         despachadoEn = despachadoEn?.toString()
@@ -287,22 +570,32 @@ class DiscoPedidoService(
         total = total
     )
 
-    private fun DiscoCuentaMesa.toResponse(pedidos: List<DiscoPedido>) = DiscoCuentaMesaResponse(
-        id = id!!,
-        mesaId = mesa.id!!,
-        mesaNumero = mesa.numero,
-        mesaNombre = mesa.nombre,
-        nombreCliente = nombreCliente,
-        meseroId = mesero.id!!,
-        meseroNombre = mesero.nombre,
-        meseroColor = mesero.color,
-        meseroAvatar = mesero.avatar,
-        jornadaFecha = jornadaFecha,
-        total = total,
-        estado = estado,
-        pedidos = pedidos.map { it.toResponse() },
-        creadoEn = creadoEn.toString()
-    )
+    private fun DiscoCuentaMesa.toResponse(
+        pedidos: List<DiscoPedido>
+    ): DiscoCuentaMesaResponse {
+        val pedidosRegulares = pedidos.filter { !it.esCortesia }
+        val pedidosCortesia = pedidos.filter { it.esCortesia && it.estado != "CANCELADO" }
+        val totalReal = if (pedidosRegulares.isNotEmpty()) pedidosRegulares.sumOf { it.total } else total
+        val descuento = if (pedidosCortesia.isNotEmpty()) pedidosCortesia.sumOf { it.total } else descuentoPromo
+        return DiscoCuentaMesaResponse(
+            id = id!!,
+            mesaId = mesa.id!!,
+            mesaNumero = mesa.numero,
+            mesaNombre = mesa.nombre,
+            nombreCliente = nombreCliente,
+            meseroId = mesero.id!!,
+            meseroNombre = mesero.nombre,
+            meseroColor = mesero.color,
+            meseroAvatar = mesero.avatar,
+            jornadaFecha = jornadaFecha,
+            total = totalReal,
+            descuentoPromo = descuento,
+            totalConDescuento = if (descuento > 0) totalReal - descuento else null,
+            estado = estado,
+            pedidos = pedidos.map { it.toResponse() },
+            creadoEn = creadoEn.toString()
+        )
+    }
 
     private fun DiscoMesa.toResponse() = DiscoMesaResponse(
         id = id!!,
@@ -314,5 +607,18 @@ class DiscoPedidoService(
         meseroNombre = mesero?.nombre,
         meseroColor = mesero?.color,
         meseroAvatar = mesero?.avatar
+    )
+
+    private fun DiscoJornadaDiaria.toResponse() = DiscoResumenJornadaResponse(
+        id = id!!,
+        fecha = fecha,
+        totalVentas = totalVentas,
+        totalBillar = totalBillar,
+        totalGeneral = totalGeneral,
+        cuentasCerradas = cuentasCerradas,
+        ticketsTotales = ticketsTotales,
+        mesasAtendidas = mesasAtendidas,
+        partidasBillar = partidasBillar,
+        cerradoEn = cerradoEn.toString()
     )
 }

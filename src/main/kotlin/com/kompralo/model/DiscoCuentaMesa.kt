@@ -32,6 +32,9 @@ data class DiscoCuentaMesa(
     @Column(nullable = false)
     var estado: String = "ABIERTA",
 
+    @Column(name = "descuento_promo", nullable = false)
+    var descuentoPromo: Int = 0,
+
     @Column(name = "pagada_en")
     var pagadaEn: LocalDateTime? = null,
 

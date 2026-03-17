@@ -122,3 +122,36 @@ data class DiscoInventarioResponse(
     val lineas: List<DiscoLineaInventarioResponse>,
     val totalGeneral: Int
 )
+
+// ─── Comparativo ───
+
+data class DiscoLineaComparativoRequest(
+    val productoId: Long,
+    val nombre: String,
+    val conteo: Int = 0,
+    val tiquets: Int = 0,
+    val diferencia: Int = 0
+)
+
+data class DiscoLineaComparativoResponse(
+    val productoId: Long,
+    val nombre: String,
+    val conteo: Int,
+    val tiquets: Int,
+    val diferencia: Int
+)
+
+data class DiscoComparativoRequest(
+    val fecha: String,
+    val lineas: List<DiscoLineaComparativoRequest>,
+    val totalConteo: Int,
+    val totalTiquets: Int
+)
+
+data class DiscoComparativoResponse(
+    val id: UUID,
+    val fecha: String,
+    val lineas: List<DiscoLineaComparativoResponse>,
+    val totalConteo: Int,
+    val totalTiquets: Int
+)

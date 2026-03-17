@@ -15,6 +15,8 @@ class DiscoManagementService(
     private val jornadaRepo: DiscoJornadaRepository,
     private val inventarioRepo: DiscoInventarioRepository,
     private val mesaRepo: DiscoMesaRepository,
+    private val comparativoRepo: DiscoComparativoRepository,
+    private val promocionRepo: DiscoPromocionRepository,
     private val userRepository: UserRepository,
     private val passwordEncoder: PasswordEncoder
 ) {
@@ -95,7 +97,6 @@ class DiscoManagementService(
         val mesero = meseroRepo.findById(id)
             .orElseThrow { RuntimeException("Mesero no encontrado con id: $id") }
 
-        // Also delete the associated auth user
         if (!mesero.username.isNullOrBlank()) {
             userRepository.findByUsername(mesero.username).ifPresent { userRepository.delete(it) }
         }
@@ -290,6 +291,55 @@ class DiscoManagementService(
         total = total
     )
 
+    fun getAllComparativos(): List<DiscoComparativoResponse> =
+        comparativoRepo.findAllByOrderByCreadoEnDesc().map { it.toResponse() }
+
+    @Transactional
+    fun createComparativo(req: DiscoComparativoRequest): DiscoComparativoResponse {
+        val comparativo = DiscoComparativo(
+            fecha = req.fecha,
+            totalConteo = req.totalConteo,
+            totalTiquets = req.totalTiquets
+        )
+
+        req.lineas.forEach { lReq ->
+            val linea = DiscoLineaComparativo(
+                productoId = lReq.productoId,
+                nombre = lReq.nombre,
+                conteo = lReq.conteo,
+                tiquets = lReq.tiquets,
+                diferencia = lReq.conteo - lReq.tiquets
+            )
+            linea.comparativo = comparativo
+            comparativo.lineas.add(linea)
+        }
+
+        return comparativoRepo.save(comparativo).toResponse()
+    }
+
+    @Transactional
+    fun deleteComparativo(id: UUID) {
+        val comparativo = comparativoRepo.findById(id)
+            .orElseThrow { RuntimeException("Comparativo no encontrado con id: $id") }
+        comparativoRepo.delete(comparativo)
+    }
+
+    private fun DiscoComparativo.toResponse() = DiscoComparativoResponse(
+        id = id!!,
+        fecha = fecha,
+        lineas = lineas.map { it.toResponse() },
+        totalConteo = totalConteo,
+        totalTiquets = totalTiquets
+    )
+
+    private fun DiscoLineaComparativo.toResponse() = DiscoLineaComparativoResponse(
+        productoId = productoId,
+        nombre = nombre,
+        conteo = conteo,
+        tiquets = tiquets,
+        diferencia = diferencia
+    )
+
     private fun DiscoMesa.toResponse() = DiscoMesaResponse(
         id = id!!,
         numero = numero,
@@ -301,4 +351,78 @@ class DiscoManagementService(
         meseroColor = mesero?.color,
         meseroAvatar = mesero?.avatar
     )
+
+    fun getAllPromociones(): List<DiscoPromocionResponse> =
+        promocionRepo.findAllByOrderByCreadoEnDesc().map { it.toResponse() }
+
+    @Transactional
+    fun createPromocion(req: DiscoPromocionRequest): DiscoPromocionResponse {
+        val regaloProducto = productoRepo.findById(req.regaloProductoId)
+            .orElseThrow { RuntimeException("Producto regalo no encontrado: ${req.regaloProductoId}") }
+
+        req.compraProductoIds.forEach { id ->
+            productoRepo.findById(id)
+                .orElseThrow { RuntimeException("Producto de compra no encontrado: $id") }
+        }
+
+        val promo = DiscoPromocion(
+            nombre = req.nombre,
+            compraProductoIds = req.compraProductoIds.joinToString(","),
+            compraCantidad = req.compraCantidad,
+            regaloProducto = regaloProducto,
+            regaloCantidad = req.regaloCantidad
+        )
+        return promocionRepo.save(promo).toResponse()
+    }
+
+    @Transactional
+    fun updatePromocion(id: UUID, req: DiscoPromocionUpdateRequest): DiscoPromocionResponse {
+        val promo = promocionRepo.findById(id)
+            .orElseThrow { RuntimeException("Promoción no encontrada con id: $id") }
+
+        val regaloProducto = if (req.regaloProductoId != null) {
+            productoRepo.findById(req.regaloProductoId)
+                .orElseThrow { RuntimeException("Producto regalo no encontrado: ${req.regaloProductoId}") }
+        } else promo.regaloProducto
+
+        val compraIds = if (req.compraProductoIds != null) {
+            req.compraProductoIds.joinToString(",")
+        } else promo.compraProductoIds
+
+        val updated = promo.copy(
+            nombre = req.nombre ?: promo.nombre,
+            compraProductoIds = compraIds,
+            compraCantidad = req.compraCantidad ?: promo.compraCantidad,
+            regaloProducto = regaloProducto,
+            regaloCantidad = req.regaloCantidad ?: promo.regaloCantidad,
+            activa = req.activa ?: promo.activa
+        )
+        return promocionRepo.save(updated).toResponse()
+    }
+
+    @Transactional
+    fun deletePromocion(id: UUID) {
+        val promo = promocionRepo.findById(id)
+            .orElseThrow { RuntimeException("Promoción no encontrada con id: $id") }
+        promocionRepo.delete(promo)
+    }
+
+    private fun DiscoPromocion.toResponse(): DiscoPromocionResponse {
+        val ids = compraProductoIds.split(",").map { UUID.fromString(it.trim()) }
+        val nombres = ids.mapNotNull { pid ->
+            productoRepo.findById(pid).orElse(null)?.nombre
+        }
+        return DiscoPromocionResponse(
+            id = id!!,
+            nombre = nombre,
+            compraProductoIds = ids,
+            compraProductoNombres = nombres,
+            compraCantidad = compraCantidad,
+            regaloProductoId = regaloProducto.id!!,
+            regaloProductoNombre = regaloProducto.nombre,
+            regaloProductoPrecio = regaloProducto.precio,
+            regaloCantidad = regaloCantidad,
+            activa = activa
+        )
+    }
 }

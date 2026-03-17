@@ -14,20 +14,14 @@ class CustomUserDetailsService(
 
     override fun loadUserByUsername(username: String): UserDetails {
         val user = userRepository.findByEmail(username)
-            .orElseThrow {
-                UsernameNotFoundException("Usuario no encontrado: $username")
-            }
+            .or { userRepository.findByUsername(username) }
+            .orElseThrow { UsernameNotFoundException("Usuario no encontrado: $username") }
 
-        val authorities = listOf(SimpleGrantedAuthority("ROLE_${user.role.name}"))
-
-        return org.springframework.security.core.userdetails.User(
-            user.email,
-            user.password,
-            user.isUserActive(),
-            true,
-            true,
-            true,
-            authorities
-        )
+        return org.springframework.security.core.userdetails.User.builder()
+            .username(user.email)
+            .password(user.password)
+            .authorities(SimpleGrantedAuthority("ROLE_${user.role.name}"))
+            .disabled(!(user.isActive ?: true))
+            .build()
     }
 }
