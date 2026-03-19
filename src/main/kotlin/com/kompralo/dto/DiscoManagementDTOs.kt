@@ -43,6 +43,13 @@ data class DiscoMeseroResponse(
     val username: String? = null
 )
 
+data class DiscoMeseroUpdateRequest(
+    val nombre: String? = null,
+    val color: String? = null,
+    val avatar: String? = null,
+    val activo: Boolean? = null
+)
+
 // ─── Jornada ───
 
 data class DiscoMeseroJornadaRequest(

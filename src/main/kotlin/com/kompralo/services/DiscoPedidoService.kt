@@ -138,11 +138,11 @@ class DiscoPedidoService(
         cuentaRepo.saveAndFlush(cuenta)
 
         val response = pedidoRepo.saveAndFlush(pedido).toResponse()
-        socketIO.sendToMesero(pedido.mesero.id.toString(), "pedido_despachado", response)
+        pedido.mesero?.id?.let { socketIO.sendToMesero(it.toString(), "pedido_despachado", response) }
         socketIO.sendToAdmin("pedido_despachado", response)
 
-        if (!pedido.esCortesia) {
-            aplicarPromosAutomaticas(pedido.mesa, pedido.mesero, cuenta)
+        if (!pedido.esCortesia && pedido.mesero != null) {
+            aplicarPromosAutomaticas(pedido.mesa, pedido.mesero!!, cuenta)
         }
 
         return response
@@ -261,8 +261,8 @@ class DiscoPedidoService(
                 pedido.canceladoEn = LocalDateTime.now()
                 pedidoRepo.saveAndFlush(pedido)
 
-                if (!pedido.esCortesia) {
-                    recalcularCortesias(pedido.mesa, pedido.mesero, cuenta)
+                if (!pedido.esCortesia && pedido.mesero != null) {
+                    recalcularCortesias(pedido.mesa, pedido.mesero!!, cuenta)
                 } else {
                     val cortesiasVivas = pedidoRepo.findByCuentaIdAndEsCortesiaTrueAndEstadoNot(
                         cuenta.id!!, "CANCELADO"
@@ -282,7 +282,7 @@ class DiscoPedidoService(
         }
 
         val response = pedido.toResponse()
-        socketIO.sendToMesero(pedido.mesero.id.toString(), "pedido_cancelado", response)
+        pedido.mesero?.id?.let { socketIO.sendToMesero(it.toString(), "pedido_cancelado", response) }
         socketIO.sendToAdmin("pedido_cancelado", response)
         return response
     }
@@ -392,7 +392,7 @@ class DiscoPedidoService(
         val cuenta = cuentaRepo.findByMesaIdAndEstado(mesaId, "ABIERTA")
             ?: throw RuntimeException("No hay cuenta abierta para esta mesa")
 
-        aplicarPromosAutomaticas(cuenta.mesa, cuenta.mesero, cuenta)
+        cuenta.mesero?.let { aplicarPromosAutomaticas(cuenta.mesa, it, cuenta) }
 
         val pedidosRegulares = pedidoRepo.findByCuentaIdAndEsCortesiaFalseAndEstado(
             cuenta.id!!, "DESPACHADO"
@@ -426,7 +426,7 @@ class DiscoPedidoService(
 
         val todosPedidos = pedidosRegulares + pedidosCortesia
         val response = cuenta.toResponse(todosPedidos)
-        socketIO.sendToMesero(cuenta.mesero.id.toString(), "cuenta_pagada", response)
+        cuenta.mesero?.id?.let { socketIO.sendToMesero(it.toString(), "cuenta_pagada", response) }
         socketIO.sendToAdmin("cuenta_pagada", response)
         socketIO.sendToAllMeseros("mesa_actualizada", DiscoMesaResponse(
             id = cuenta.mesa.id!!,
@@ -545,10 +545,10 @@ class DiscoPedidoService(
         mesaId = mesa.id!!,
         mesaNumero = mesa.numero,
         mesaNombre = mesa.nombre,
-        meseroId = mesero.id!!,
-        meseroNombre = mesero.nombre,
-        meseroColor = mesero.color,
-        meseroAvatar = mesero.avatar,
+        meseroId = mesero?.id ?: UUID(0, 0),
+        meseroNombre = mesero?.nombre ?: "Eliminado",
+        meseroColor = mesero?.color ?: "#999999",
+        meseroAvatar = mesero?.avatar ?: "",
         ticketDia = ticketDia,
         estado = estado,
         total = total,
@@ -583,10 +583,10 @@ class DiscoPedidoService(
             mesaNumero = mesa.numero,
             mesaNombre = mesa.nombre,
             nombreCliente = nombreCliente,
-            meseroId = mesero.id!!,
-            meseroNombre = mesero.nombre,
-            meseroColor = mesero.color,
-            meseroAvatar = mesero.avatar,
+            meseroId = mesero?.id ?: UUID(0, 0),
+            meseroNombre = mesero?.nombre ?: "Eliminado",
+            meseroColor = mesero?.color ?: "#999999",
+            meseroAvatar = mesero?.avatar ?: "",
             jornadaFecha = jornadaFecha,
             total = totalReal,
             descuentoPromo = descuento,

@@ -10,6 +10,8 @@ interface DiscoCuentaMesaRepository : JpaRepository<DiscoCuentaMesa, UUID> {
 
     fun findByMesaIdAndEstado(mesaId: UUID, estado: String): DiscoCuentaMesa?
 
+    fun findByMeseroId(meseroId: UUID): List<DiscoCuentaMesa>
+
     fun findByMeseroIdAndJornadaFecha(meseroId: UUID, jornadaFecha: String): List<DiscoCuentaMesa>
 
     fun findByJornadaFechaOrderByCreadoEnDesc(jornadaFecha: String): List<DiscoCuentaMesa>

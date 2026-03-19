@@ -13,13 +13,13 @@ data class DiscoMesero(
     val id: UUID? = null,
 
     @Column(nullable = false)
-    val nombre: String,
+    var nombre: String,
 
     @Column(nullable = false)
-    val color: String,
+    var color: String,
 
     @Column(nullable = false)
-    val avatar: String,
+    var avatar: String,
 
     @Column(nullable = false)
     var activo: Boolean = true,

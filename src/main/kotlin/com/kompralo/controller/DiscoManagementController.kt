@@ -97,6 +97,20 @@ class DiscoManagementController(
         }
     }
 
+    @PatchMapping("/meseros/{id}")
+    fun updateMesero(@PathVariable id: UUID, @RequestBody req: DiscoMeseroUpdateRequest): ResponseEntity<*> {
+        return try {
+            val mesero = discoManagementService.updateMesero(id, req)
+            ResponseEntity.ok(mesero)
+        } catch (e: IllegalArgumentException) {
+            ResponseEntity.badRequest().body(mapOf("message" to (e.message ?: "Mesero no encontrado")))
+        } catch (e: Exception) {
+            log.error("Error al actualizar mesero $id: ${e.message}", e)
+            ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(mapOf("message" to "Error al actualizar mesero"))
+        }
+    }
+
     @DeleteMapping("/meseros/{id}")
     fun deleteMesero(@PathVariable id: UUID): ResponseEntity<Void> {
         return try {

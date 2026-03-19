@@ -3,6 +3,8 @@ package com.kompralo.services
 import com.kompralo.dto.*
 import com.kompralo.model.*
 import com.kompralo.repository.*
+import jakarta.persistence.EntityManager
+import jakarta.persistence.PersistenceContext
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -17,9 +19,14 @@ class DiscoManagementService(
     private val mesaRepo: DiscoMesaRepository,
     private val comparativoRepo: DiscoComparativoRepository,
     private val promocionRepo: DiscoPromocionRepository,
+    private val pedidoRepo: DiscoPedidoRepository,
+    private val cuentaRepo: DiscoCuentaMesaRepository,
     private val userRepository: UserRepository,
     private val passwordEncoder: PasswordEncoder
 ) {
+
+    @PersistenceContext
+    private lateinit var entityManager: EntityManager
 
     fun getAllProductos(): List<DiscoProductoResponse> =
         productoRepo.findAllByOrderByCreadoEnDesc().map { it.toResponse() }
@@ -93,15 +100,56 @@ class DiscoManagementService(
     }
 
     @Transactional
+    fun updateMesero(id: UUID, req: DiscoMeseroUpdateRequest): DiscoMeseroResponse {
+        val mesero = meseroRepo.findById(id).orElseThrow { IllegalArgumentException("Mesero no encontrado") }
+        req.nombre?.let { mesero.nombre = it }
+        req.color?.let { mesero.color = it }
+        req.avatar?.let { mesero.avatar = it }
+        req.activo?.let { mesero.activo = it }
+        val saved = meseroRepo.save(mesero)
+        return DiscoMeseroResponse(saved.id!!, saved.nombre, saved.color, saved.avatar, saved.activo, saved.username)
+    }
+
+    @Transactional
     fun deleteMesero(id: UUID) {
-        val mesero = meseroRepo.findById(id)
-            .orElseThrow { RuntimeException("Mesero no encontrado con id: $id") }
+        // Obtener username via SQL nativo — NO cargamos entidad JPA
+        @Suppress("UNCHECKED_CAST")
+        val result = entityManager.createNativeQuery(
+            "SELECT username FROM disco_meseros WHERE id = ?1"
+        ).setParameter(1, id).resultList as List<String?>
 
-        if (!mesero.username.isNullOrBlank()) {
-            userRepository.findByUsername(mesero.username).ifPresent { userRepository.delete(it) }
+        if (result.isEmpty()) {
+            throw RuntimeException("Mesero no encontrado con id: $id")
         }
+        val username = result[0]
 
-        meseroRepo.delete(mesero)
+        // SQL nativo en orden estricto — sin interferencia de Hibernate
+        entityManager.createNativeQuery(
+            "DELETE FROM disco_linea_pedido WHERE pedido_id IN (SELECT id FROM disco_pedidos WHERE mesero_id = ?1)"
+        ).setParameter(1, id).executeUpdate()
+
+        entityManager.createNativeQuery(
+            "DELETE FROM disco_pedidos WHERE mesero_id = ?1"
+        ).setParameter(1, id).executeUpdate()
+
+        entityManager.createNativeQuery(
+            "DELETE FROM disco_cuenta_mesa WHERE mesero_id = ?1"
+        ).setParameter(1, id).executeUpdate()
+
+        entityManager.createNativeQuery(
+            "UPDATE disco_mesas SET mesero_id = NULL WHERE mesero_id = ?1"
+        ).setParameter(1, id).executeUpdate()
+
+        entityManager.createNativeQuery(
+            "DELETE FROM disco_meseros WHERE id = ?1"
+        ).setParameter(1, id).executeUpdate()
+
+        // Eliminar usuario auth si existe
+        if (!username.isNullOrBlank()) {
+            entityManager.createNativeQuery(
+                "DELETE FROM auth_users WHERE username = ?1"
+            ).setParameter(1, username).executeUpdate()
+        }
     }
 
     fun getAllJornadas(): List<DiscoJornadaResponse> =
