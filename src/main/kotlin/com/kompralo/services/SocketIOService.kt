@@ -7,6 +7,7 @@ import com.corundumstudio.socketio.listener.DataListener
 import com.corundumstudio.socketio.listener.DisconnectListener
 import jakarta.annotation.PostConstruct
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 
 @Service
@@ -17,8 +18,16 @@ class SocketIOService(
 
     private val log = LoggerFactory.getLogger(SocketIOService::class.java)
 
+    @Value("\${socketio.enabled:true}")
+    private var enabled: Boolean = true
+
     @PostConstruct
     fun startServer() {
+        if (!enabled) {
+            log.info("Socket.IO DESACTIVADO por configuracion (socketio.enabled=false)")
+            return
+        }
+
         socketIOServer.addConnectListener(ConnectListener { client ->
             val token = extractTokenFromHandshake(client)
 
@@ -126,26 +135,32 @@ class SocketIOService(
     }
 
     fun sendToUser(userId: Long, event: String, data: Any) {
+        if (!enabled) return
         socketIOServer.getRoomOperations("user_$userId").sendEvent(event, data)
     }
 
     fun broadcast(event: String, data: Any) {
+        if (!enabled) return
         socketIOServer.broadcastOperations.sendEvent(event, data)
     }
 
     fun sendToRoom(room: String, event: String, data: Any) {
+        if (!enabled) return
         socketIOServer.getRoomOperations(room).sendEvent(event, data)
     }
 
     fun sendToAdmin(event: String, data: Any) {
+        if (!enabled) return
         socketIOServer.getRoomOperations("disco_admin").sendEvent(event, data)
     }
 
     fun sendToMesero(meseroId: String, event: String, data: Any) {
+        if (!enabled) return
         socketIOServer.getRoomOperations("disco_mesero_$meseroId").sendEvent(event, data)
     }
 
     fun sendToAllMeseros(event: String, data: Any) {
+        if (!enabled) return
         socketIOServer.getRoomOperations("disco_meseros").sendEvent(event, data)
     }
 

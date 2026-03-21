@@ -3,6 +3,7 @@ package com.kompralo.config
 import com.corundumstudio.socketio.Configuration
 import com.corundumstudio.socketio.SocketIOServer
 import com.corundumstudio.socketio.annotation.SpringAnnotationScanner
+import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
 import org.springframework.stereotype.Component
@@ -14,11 +15,16 @@ class SocketIOConfig(
     private val allowedOrigins: String
 ) {
 
+    private val log = LoggerFactory.getLogger(SocketIOConfig::class.java)
+
     @Value("\${socketio.host:0.0.0.0}")
     private lateinit var host: String
 
     @Value("\${socketio.port:3001}")
     private var port: Int = 3001
+
+    @Value("\${socketio.enabled:true}")
+    private var enabled: Boolean = true
 
     private var server: SocketIOServer? = null
 
@@ -44,6 +50,8 @@ class SocketIOConfig(
     fun springAnnotationScanner(socketServer: SocketIOServer): SpringAnnotationScanner {
         return SpringAnnotationScanner(socketServer)
     }
+
+    fun isEnabled(): Boolean = enabled
 
     @PreDestroy
     fun stopSocketIOServer() {
