@@ -43,8 +43,6 @@ out/
 .env
 .env.local
 .env.production
-application.properties
-application-docker.properties
 docker-compose.yml
 firebase-credentials.json
 firebase-service-account.json

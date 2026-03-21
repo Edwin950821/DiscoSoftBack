@@ -10,10 +10,6 @@ import java.util.UUID
 
 @RestController
 @RequestMapping("/api/disco/management")
-@CrossOrigin(
-    origins = ["http://localhost:5173", "http://localhost:3000"],
-    allowCredentials = "true"
-)
 class DiscoManagementController(
     private val discoManagementService: DiscoManagementService
 ) {
