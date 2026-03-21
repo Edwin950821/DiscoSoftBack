@@ -356,7 +356,7 @@ class DiscoManagementService(
                 nombre = lReq.nombre,
                 conteo = lReq.conteo,
                 tiquets = lReq.tiquets,
-                diferencia = lReq.conteo - lReq.tiquets
+                diferencia = lReq.tiquets - lReq.conteo
             )
             linea.comparativo = comparativo
             comparativo.lineas.add(linea)
