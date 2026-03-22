@@ -19,7 +19,13 @@ class DiscoBillarService(
     private val socketIO: SocketIOService
 ) {
 
-    private val hoy: String get() = LocalDateTime.now(ZoneId.of("America/Bogota")).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+    // El "día" cambia a las 6AM Colombia, no a medianoche.
+    // Así una jornada nocturna (ej: 2PM a 3AM) queda en una sola fecha.
+    private val hoy: String get() {
+        val ahora = LocalDateTime.now(ZoneId.of("America/Bogota"))
+        val fechaJornada = if (ahora.hour < 6) ahora.minusDays(1) else ahora
+        return fechaJornada.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+    }
 
     @Transactional(readOnly = true)
     fun getAllMesasBillar(): List<DiscoMesaBillarResponse> {
