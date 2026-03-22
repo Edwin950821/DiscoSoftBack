@@ -14,7 +14,7 @@ data class DiscoPartidaBillar(
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "mesa_billar_id", nullable = false)
-    val mesaBillar: DiscoMesaBillar,
+    var mesaBillar: DiscoMesaBillar,
 
     @Column(name = "nombre_cliente")
     val nombreCliente: String = "Cliente",

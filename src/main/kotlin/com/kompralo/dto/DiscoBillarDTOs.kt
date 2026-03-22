@@ -28,6 +28,10 @@ data class DiscoIniciarPartidaRequest(
     val precioPorHora: Int? = null
 )
 
+data class DiscoTrasladarPartidaRequest(
+    val mesaDestinoId: UUID
+)
+
 data class DiscoPartidaBillarResponse(
     val id: UUID,
     val mesaBillarId: UUID,

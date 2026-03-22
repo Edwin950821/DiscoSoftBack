@@ -120,6 +120,33 @@ class DiscoBillarService(
         return response
     }
 
+    @Transactional
+    fun trasladarPartida(mesaOrigenId: UUID, mesaDestinoId: UUID): DiscoPartidaBillarResponse {
+        val mesaOrigen = mesaBillarRepo.findById(mesaOrigenId)
+            .orElseThrow { NoSuchElementException("Mesa de origen no encontrada") }
+        val mesaDestino = mesaBillarRepo.findById(mesaDestinoId)
+            .orElseThrow { NoSuchElementException("Mesa de destino no encontrada") }
+
+        val partida = partidaRepo.findByMesaBillarIdAndEstado(mesaOrigenId, "EN_JUEGO")
+            ?: throw IllegalStateException("No hay partida activa en la mesa de origen")
+
+        if (mesaDestino.estado == "EN_JUEGO") throw IllegalStateException("La mesa de destino ya tiene una partida activa")
+        if (!mesaDestino.activo) throw IllegalStateException("La mesa de destino no esta activa")
+
+        // Mover partida a mesa destino
+        partida.mesaBillar = mesaDestino
+        mesaOrigen.estado = "LIBRE"
+        mesaDestino.estado = "EN_JUEGO"
+
+        mesaBillarRepo.save(mesaOrigen)
+        mesaBillarRepo.save(mesaDestino)
+        val saved = partidaRepo.save(partida)
+
+        val response = saved.toResponse()
+        socketIO.sendToAdmin("billar_partida_trasladada", response)
+        return response
+    }
+
     @Transactional(readOnly = true)
     fun getPartidasHoy(): List<DiscoPartidaBillarResponse> =
         partidaRepo.findByJornadaFechaOrderByCreadoEnDesc(hoy).map { it.toResponse() }

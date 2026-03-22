@@ -99,6 +99,22 @@ class DiscoBillarController(
         }
     }
 
+    @PostMapping("/mesas/{mesaId}/trasladar")
+    fun trasladarPartida(@PathVariable mesaId: UUID, @RequestBody req: DiscoTrasladarPartidaRequest): ResponseEntity<*> {
+        return try {
+            val partida = billarService.trasladarPartida(mesaId, req.mesaDestinoId)
+            ResponseEntity.ok(partida)
+        } catch (e: IllegalStateException) {
+            ResponseEntity.badRequest().body(mapOf("message" to (e.message ?: "No se puede trasladar")))
+        } catch (e: NoSuchElementException) {
+            ResponseEntity.status(HttpStatus.NOT_FOUND).body(mapOf("message" to (e.message ?: "No encontrado")))
+        } catch (e: Exception) {
+            log.error("Error al trasladar partida de mesa $mesaId: ${e.message}", e)
+            ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(mapOf("message" to "Error al trasladar partida"))
+        }
+    }
+
     @GetMapping("/partidas/hoy")
     fun getPartidasHoy(): ResponseEntity<*> {
         return try {
