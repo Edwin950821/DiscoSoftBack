@@ -6,6 +6,7 @@ import com.kompralo.repository.*
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.LocalDateTime
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.*
 
@@ -22,7 +23,7 @@ class DiscoPedidoService(
     private val socketIO: SocketIOService
 ) {
 
-    private val hoy: String get() = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+    private val hoy: String get() = LocalDateTime.now(ZoneId.of("America/Bogota")).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
 
     @Transactional
     fun atenderMesa(mesaId: UUID, req: DiscoAtenderMesaRequest): DiscoMesaResponse {
