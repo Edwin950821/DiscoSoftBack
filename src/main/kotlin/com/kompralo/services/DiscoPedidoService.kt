@@ -482,7 +482,7 @@ class DiscoPedidoService(
         val mesasAtendidas = cuentasHoy.map { it.mesa.id }.distinct().size
 
         val partidasHoy = partidaBillarRepo.findByJornadaFechaOrderByCreadoEnDesc(fecha)
-        val partidasFinalizadas = partidasHoy.filter { it.estado == "FINALIZADO" }
+        val partidasFinalizadas = partidasHoy.filter { it.estado == "FINALIZADA" }
         val totalBillar = partidasFinalizadas.sumOf { it.total ?: 0 }
 
         val jornadaCerrada = jornadaDiariaRepo.findByFecha(fecha) != null
