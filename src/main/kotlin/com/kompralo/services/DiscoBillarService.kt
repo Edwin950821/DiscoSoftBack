@@ -36,7 +36,7 @@ class DiscoBillarService(
         val negocioId = tenantContext.getNegocioId()
         val mesas = mesaBillarRepo.findByNegocioIdAndActivoTrueOrderByNumeroAsc(negocioId)
         return mesas.map { mesa ->
-            val partidaActiva = partidaRepo.findByMesaBillarIdAndEstado(mesa.id!!, "EN_JUEGO")
+            val partidaActiva = partidaRepo.findByNegocioIdAndMesaBillarIdAndEstado(negocioId, mesa.id!!, "EN_JUEGO")
             mesa.toResponse(partidaActiva)
         }
     }
@@ -68,7 +68,8 @@ class DiscoBillarService(
         req.activo?.let { mesa.activo = it }
 
         val saved = mesaBillarRepo.save(mesa)
-        val partidaActiva = partidaRepo.findByMesaBillarIdAndEstado(id, "EN_JUEGO")
+        val negocioId = tenantContext.getNegocioId()
+        val partidaActiva = partidaRepo.findByNegocioIdAndMesaBillarIdAndEstado(negocioId, id, "EN_JUEGO")
         return saved.toResponse(partidaActiva)
     }
 
@@ -110,10 +111,11 @@ class DiscoBillarService(
 
     @Transactional
     fun finalizarPartida(mesaId: UUID): DiscoPartidaBillarResponse {
+        val negocioId = tenantContext.getNegocioId()
         val mesa = mesaBillarRepo.findById(mesaId)
             .orElseThrow { NoSuchElementException("Mesa de billar no encontrada") }
 
-        val partida = partidaRepo.findByMesaBillarIdAndEstado(mesaId, "EN_JUEGO")
+        val partida = partidaRepo.findByNegocioIdAndMesaBillarIdAndEstado(negocioId, mesaId, "EN_JUEGO")
             ?: throw IllegalStateException("No hay partida activa en esta mesa")
 
         val ahora = LocalDateTime.now()
@@ -142,7 +144,8 @@ class DiscoBillarService(
         val mesaDestino = mesaBillarRepo.findById(mesaDestinoId)
             .orElseThrow { NoSuchElementException("Mesa de destino no encontrada") }
 
-        val partida = partidaRepo.findByMesaBillarIdAndEstado(mesaOrigenId, "EN_JUEGO")
+        val negocioId = tenantContext.getNegocioId()
+        val partida = partidaRepo.findByNegocioIdAndMesaBillarIdAndEstado(negocioId, mesaOrigenId, "EN_JUEGO")
             ?: throw IllegalStateException("No hay partida activa en la mesa de origen")
 
         if (mesaDestino.estado == "EN_JUEGO") throw IllegalStateException("La mesa de destino ya tiene una partida activa")

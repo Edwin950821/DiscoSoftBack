@@ -43,4 +43,6 @@ interface DiscoPedidoRepository : JpaRepository<DiscoPedido, UUID> {
     fun countByNegocioIdAndJornadaFecha(negocioId: UUID, jornadaFecha: String): Long
 
     fun findByNegocioIdAndMesaIdAndEstado(negocioId: UUID, mesaId: UUID, estado: String): List<DiscoPedido>
+
+    fun findByNegocioIdAndMesaIdAndJornadaFechaAndEstado(negocioId: UUID, mesaId: UUID, jornadaFecha: String, estado: String): List<DiscoPedido>
 }
