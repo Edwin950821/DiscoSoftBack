@@ -133,7 +133,7 @@ data class DiscoInventarioResponse(
 // ─── Comparativo ───
 
 data class DiscoLineaComparativoRequest(
-    val productoId: Long,
+    val productoId: UUID,
     val nombre: String,
     val conteo: Int = 0,
     val tiquets: Int = 0,
@@ -141,7 +141,7 @@ data class DiscoLineaComparativoRequest(
 )
 
 data class DiscoLineaComparativoResponse(
-    val productoId: Long,
+    val productoId: UUID,
     val nombre: String,
     val conteo: Int,
     val tiquets: Int,

@@ -219,7 +219,8 @@ class DiscoManagementService(
                 pagosQR = mReq.pagos["QR"] ?: 0,
                 pagosNequi = mReq.pagos["Nequi"] ?: 0,
                 pagosDatafono = mReq.pagos["Datafono"] ?: 0,
-                pagosVales = mReq.pagos["Vales"] ?: 0
+                pagosVales = mReq.pagos["Vales"] ?: 0,
+                negocioId = negocioId
             )
             meseroJornada.jornada = jornada
             jornada.meseros.add(meseroJornada)
@@ -258,7 +259,8 @@ class DiscoManagementService(
                 entradas = lReq.entradas,
                 invFisico = lReq.invFisico,
                 saldo = lReq.saldo,
-                total = lReq.total
+                total = lReq.total,
+                negocioId = negocioId
             )
             linea.inventario = inventario
             inventario.lineas.add(linea)
@@ -388,7 +390,8 @@ class DiscoManagementService(
                 nombre = lReq.nombre,
                 conteo = lReq.conteo,
                 tiquets = lReq.tiquets,
-                diferencia = lReq.tiquets - lReq.conteo
+                diferencia = lReq.tiquets - lReq.conteo,
+                negocioId = negocioId
             )
             linea.comparativo = comparativo
             comparativo.lineas.add(linea)

@@ -39,8 +39,8 @@ data class DiscoLineaComparativo(
     @Column(columnDefinition = "uuid", updatable = false)
     val id: UUID? = null,
 
-    @Column(name = "producto_id", nullable = false)
-    val productoId: Long,
+    @Column(name = "producto_id", nullable = false, columnDefinition = "uuid")
+    val productoId: UUID,
 
     @Column(nullable = false)
     val nombre: String,
