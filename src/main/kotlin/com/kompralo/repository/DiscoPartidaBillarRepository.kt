@@ -8,4 +8,8 @@ interface DiscoPartidaBillarRepository : JpaRepository<DiscoPartidaBillar, UUID>
     fun findByMesaBillarIdAndEstado(mesaBillarId: UUID, estado: String): DiscoPartidaBillar?
     fun findByJornadaFechaOrderByCreadoEnDesc(jornadaFecha: String): List<DiscoPartidaBillar>
     fun findByJornadaFechaAndEstado(jornadaFecha: String, estado: String): List<DiscoPartidaBillar>
+
+    fun findByNegocioIdAndJornadaFechaOrderByCreadoEnDesc(negocioId: UUID, jornadaFecha: String): List<DiscoPartidaBillar>
+
+    fun findByNegocioIdAndJornadaFechaAndEstado(negocioId: UUID, jornadaFecha: String, estado: String): List<DiscoPartidaBillar>
 }

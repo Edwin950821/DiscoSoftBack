@@ -9,4 +9,6 @@ import java.util.UUID
 interface DiscoInventarioRepository : JpaRepository<DiscoInventario, UUID> {
 
     fun findAllByOrderByCreadoEnDesc(): List<DiscoInventario>
+
+    fun findByNegocioIdOrderByCreadoEnDesc(negocioId: UUID): List<DiscoInventario>
 }

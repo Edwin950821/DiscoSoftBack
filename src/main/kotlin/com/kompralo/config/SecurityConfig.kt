@@ -48,7 +48,10 @@ class SecurityConfig(
                     "/api/public/**",
                     "/api/webhooks/**",
                     "/api/orders/**",
-                    "/api/disco/**"
+                    "/api/disco/auth/**",
+                    "/api/disco/management/**",
+                    "/api/disco/pedidos/**",
+                    "/api/disco/billar/**"
                 )
             }
             .headers { headers ->
@@ -75,8 +78,13 @@ class SecurityConfig(
                         "/api/public/**",
                         "/api/webhooks/**",
                         "/uploads/**",
-                        "/api/disco/**"
+                        "/api/disco/auth/**"
                     ).permitAll()
+                    .requestMatchers(
+                        "/api/disco/management/**",
+                        "/api/disco/pedidos/**",
+                        "/api/disco/billar/**"
+                    ).authenticated()
                     .anyRequest().authenticated()
             }
             .sessionManagement { session ->

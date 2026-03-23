@@ -5,6 +5,7 @@ import com.kompralo.dto.DiscoLoginRequest
 import com.kompralo.dto.DiscoRol
 import com.kompralo.model.Role
 import com.kompralo.repository.DiscoMeseroRepository
+import com.kompralo.repository.NegocioRepository
 import com.kompralo.repository.UserRepository
 import com.kompralo.services.JwtService
 import jakarta.servlet.http.Cookie
@@ -22,6 +23,7 @@ import org.springframework.web.bind.annotation.*
 class DiscoAuthController(
     private val userRepository: UserRepository,
     private val meseroRepo: DiscoMeseroRepository,
+    private val negocioRepo: NegocioRepository,
     private val passwordEncoder: PasswordEncoder,
     private val jwtService: JwtService
 ) {
@@ -95,8 +97,15 @@ class DiscoAuthController(
             val secure = isSecureRequest(servletRequest)
             servletResponse.addCookie(createAuthCookie(accessToken, secure))
 
+            val negocioId = user.negocioId
+            val negocio = negocioId?.let { negocioRepo.findById(it).orElse(null) }
+
             val meseroId = if (user.role == Role.MESERO && !user.username.isNullOrBlank()) {
-                meseroRepo.findByUsername(user.username!!)?.id?.toString()
+                if (negocioId != null) {
+                    meseroRepo.findByNegocioIdAndUsername(negocioId, user.username!!)?.id?.toString()
+                } else {
+                    meseroRepo.findByUsername(user.username!!)?.id?.toString()
+                }
             } else null
 
             ResponseEntity.ok(DiscoAuthResponse(
@@ -105,6 +114,8 @@ class DiscoAuthController(
                 nombre = user.name,
                 rol = roleToDiscoRol(user.role),
                 meseroId = meseroId,
+                negocioId = negocioId?.toString(),
+                negocioNombre = negocio?.nombre,
                 mensaje = "Bienvenido a Monastery Club"
             ))
 

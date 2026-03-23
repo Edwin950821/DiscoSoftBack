@@ -13,4 +13,10 @@ interface DiscoMeseroRepository : JpaRepository<DiscoMesero, UUID> {
     fun findByActivoTrue(): List<DiscoMesero>
 
     fun findByUsername(username: String): DiscoMesero?
+
+    fun findByNegocioIdOrderByCreadoEnDesc(negocioId: UUID): List<DiscoMesero>
+
+    fun findByNegocioIdAndActivoTrue(negocioId: UUID): List<DiscoMesero>
+
+    fun findByNegocioIdAndUsername(negocioId: UUID, username: String): DiscoMesero?
 }

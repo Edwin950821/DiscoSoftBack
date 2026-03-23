@@ -8,4 +8,6 @@ import java.util.UUID
 @Repository
 interface DiscoComparativoRepository : JpaRepository<DiscoComparativo, UUID> {
     fun findAllByOrderByCreadoEnDesc(): List<DiscoComparativo>
+
+    fun findByNegocioIdOrderByCreadoEnDesc(negocioId: UUID): List<DiscoComparativo>
 }

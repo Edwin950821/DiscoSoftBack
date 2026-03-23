@@ -31,5 +31,8 @@ data class DiscoLineaPedido(
     val cantidad: Int = 1,
 
     @Column(nullable = false)
-    val total: Int = 0
+    val total: Int = 0,
+
+    @Column(name = "negocio_id", nullable = false, columnDefinition = "uuid")
+    val negocioId: UUID = UUID(0, 0)
 )

@@ -5,14 +5,14 @@ import java.time.LocalDateTime
 import java.util.UUID
 
 @Entity
-@Table(name = "disco_mesas")
+@Table(name = "disco_mesas", uniqueConstraints = [UniqueConstraint(name = "uq_mesa_numero_negocio", columnNames = ["numero", "negocio_id"])])
 data class DiscoMesa(
     @Id
     @GeneratedValue(strategy = GenerationType.AUTO)
     @Column(columnDefinition = "uuid", updatable = false)
     val id: UUID? = null,
 
-    @Column(nullable = false, unique = true)
+    @Column(nullable = false)
     val numero: Int,
 
     @Column(nullable = false)
@@ -32,5 +32,8 @@ data class DiscoMesa(
     var jornadaId: UUID? = null,
 
     @Column(name = "creado_en", nullable = false, updatable = false)
-    val creadoEn: LocalDateTime = LocalDateTime.now()
+    val creadoEn: LocalDateTime = LocalDateTime.now(),
+
+    @Column(name = "negocio_id", nullable = false, columnDefinition = "uuid")
+    val negocioId: UUID = UUID(0, 0)
 )

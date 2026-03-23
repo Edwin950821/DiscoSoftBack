@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore
 import jakarta.persistence.*
 import java.util.UUID
 
+
 @Entity
 @Table(name = "disco_mesero_jornada")
 data class DiscoMeseroJornada(
@@ -51,5 +52,8 @@ data class DiscoMeseroJornada(
     var pagosDatafono: Int = 0,
 
     @Column(name = "pagos_vales", nullable = false)
-    var pagosVales: Int = 0
+    var pagosVales: Int = 0,
+
+    @Column(name = "negocio_id", nullable = false, columnDefinition = "uuid")
+    val negocioId: UUID = UUID(0, 0)
 )

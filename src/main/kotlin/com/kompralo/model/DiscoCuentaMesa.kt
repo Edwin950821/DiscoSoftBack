@@ -39,5 +39,8 @@ data class DiscoCuentaMesa(
     var pagadaEn: LocalDateTime? = null,
 
     @Column(name = "creado_en", nullable = false, updatable = false)
-    val creadoEn: LocalDateTime = LocalDateTime.now()
+    val creadoEn: LocalDateTime = LocalDateTime.now(),
+
+    @Column(name = "negocio_id", nullable = false, columnDefinition = "uuid")
+    val negocioId: UUID = UUID(0, 0)
 )

@@ -35,4 +35,12 @@ interface DiscoPedidoRepository : JpaRepository<DiscoPedido, UUID> {
     fun findByCuentaIdAndEsCortesiaTrueAndEstadoNot(cuentaId: UUID, estado: String): List<DiscoPedido>
 
     fun findByCuentaId(cuentaId: UUID): List<DiscoPedido>
+
+    fun findByNegocioIdAndJornadaFechaOrderByCreadoEnDesc(negocioId: UUID, jornadaFecha: String): List<DiscoPedido>
+
+    fun findByNegocioIdAndEstado(negocioId: UUID, estado: String): List<DiscoPedido>
+
+    fun countByNegocioIdAndJornadaFecha(negocioId: UUID, jornadaFecha: String): Long
+
+    fun findByNegocioIdAndMesaIdAndEstado(negocioId: UUID, mesaId: UUID, estado: String): List<DiscoPedido>
 }

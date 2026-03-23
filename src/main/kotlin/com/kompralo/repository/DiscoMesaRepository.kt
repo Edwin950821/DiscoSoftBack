@@ -15,4 +15,6 @@ interface DiscoMesaRepository : JpaRepository<DiscoMesa, UUID> {
     fun findByMeseroId(meseroId: UUID): List<DiscoMesa>
 
     fun findByNumero(numero: Int): DiscoMesa?
+
+    fun findByNegocioIdOrderByNumeroAsc(negocioId: UUID): List<DiscoMesa>
 }

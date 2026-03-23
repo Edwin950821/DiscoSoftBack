@@ -1,5 +1,6 @@
 package com.kompralo.services
 
+import com.kompralo.config.TenantContext
 import com.kompralo.dto.*
 import com.kompralo.model.*
 import com.kompralo.repository.*
@@ -16,8 +17,11 @@ import kotlin.math.ceil
 class DiscoBillarService(
     private val mesaBillarRepo: DiscoMesaBillarRepository,
     private val partidaRepo: DiscoPartidaBillarRepository,
-    private val socketIO: SocketIOService
+    private val socketIO: SocketIOService,
+    private val tenantContext: TenantContext
 ) {
+
+    private val tenantId: String get() = tenantContext.getNegocioId().toString()
 
     // El "día" cambia a las 6AM Colombia, no a medianoche.
     // Así una jornada nocturna (ej: 2PM a 3AM) queda en una sola fecha.
@@ -29,7 +33,8 @@ class DiscoBillarService(
 
     @Transactional(readOnly = true)
     fun getAllMesasBillar(): List<DiscoMesaBillarResponse> {
-        val mesas = mesaBillarRepo.findAllByOrderByNumeroAsc()
+        val negocioId = tenantContext.getNegocioId()
+        val mesas = mesaBillarRepo.findByNegocioIdAndActivoTrueOrderByNumeroAsc(negocioId)
         return mesas.map { mesa ->
             val partidaActiva = partidaRepo.findByMesaBillarIdAndEstado(mesa.id!!, "EN_JUEGO")
             mesa.toResponse(partidaActiva)
@@ -38,17 +43,18 @@ class DiscoBillarService(
 
     @Transactional
     fun createMesaBillar(req: DiscoMesaBillarRequest): DiscoMesaBillarResponse {
-        val allMesas = mesaBillarRepo.findAllByOrderByNumeroAsc()
-        val nextNumero = if (allMesas.isEmpty()) 1 else allMesas.maxOf { it.numero } + 1
+        val negocioId = tenantContext.getNegocioId()
+        val nextNumero = mesaBillarRepo.findMaxNumeroByNegocioId(negocioId) + 1
 
         val mesa = DiscoMesaBillar(
             numero = nextNumero,
             nombre = req.nombre,
-            precioPorHora = req.precioPorHora
+            precioPorHora = req.precioPorHora,
+            negocioId = negocioId
         )
         val saved = mesaBillarRepo.save(mesa)
         val response = saved.toResponse(null)
-        socketIO.sendToAdmin("billar_mesa_creada", response)
+        socketIO.sendToAdmin("billar_mesa_creada", response, tenantId)
         return response
     }
 
@@ -76,6 +82,7 @@ class DiscoBillarService(
 
     @Transactional
     fun iniciarPartida(mesaId: UUID, req: DiscoIniciarPartidaRequest): DiscoPartidaBillarResponse {
+        val negocioId = tenantContext.getNegocioId()
         val mesa = mesaBillarRepo.findById(mesaId)
             .orElseThrow { RuntimeException("Mesa de billar no encontrada") }
 
@@ -88,7 +95,8 @@ class DiscoBillarService(
             mesaBillar = mesa,
             nombreCliente = req.nombreCliente,
             precioPorHora = precioHora,
-            jornadaFecha = hoy
+            jornadaFecha = hoy,
+            negocioId = negocioId
         )
 
         mesa.estado = "EN_JUEGO"
@@ -96,7 +104,7 @@ class DiscoBillarService(
         val saved = partidaRepo.save(partida)
 
         val response = saved.toResponse()
-        socketIO.sendToAdmin("billar_partida_iniciada", response)
+        socketIO.sendToAdmin("billar_partida_iniciada", response, tenantId)
         return response
     }
 
@@ -123,7 +131,7 @@ class DiscoBillarService(
         val saved = partidaRepo.save(partida)
 
         val response = saved.toResponse()
-        socketIO.sendToAdmin("billar_partida_finalizada", response)
+        socketIO.sendToAdmin("billar_partida_finalizada", response, tenantId)
         return response
     }
 
@@ -150,17 +158,20 @@ class DiscoBillarService(
         val saved = partidaRepo.save(partida)
 
         val response = saved.toResponse()
-        socketIO.sendToAdmin("billar_partida_trasladada", response)
+        socketIO.sendToAdmin("billar_partida_trasladada", response, tenantId)
         return response
     }
 
     @Transactional(readOnly = true)
-    fun getPartidasHoy(): List<DiscoPartidaBillarResponse> =
-        partidaRepo.findByJornadaFechaOrderByCreadoEnDesc(hoy).map { it.toResponse() }
+    fun getPartidasHoy(): List<DiscoPartidaBillarResponse> {
+        val negocioId = tenantContext.getNegocioId()
+        return partidaRepo.findByNegocioIdAndJornadaFechaOrderByCreadoEnDesc(negocioId, hoy).map { it.toResponse() }
+    }
 
     @Transactional(readOnly = true)
     fun getTotalBillarHoy(): Int {
-        val finalizadas = partidaRepo.findByJornadaFechaAndEstado(hoy, "FINALIZADA")
+        val negocioId = tenantContext.getNegocioId()
+        val finalizadas = partidaRepo.findByNegocioIdAndJornadaFechaAndEstado(negocioId, hoy, "FINALIZADA")
         return finalizadas.sumOf { it.total ?: 0 }
     }
 

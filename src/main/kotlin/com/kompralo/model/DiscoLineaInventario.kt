@@ -39,5 +39,8 @@ data class DiscoLineaInventario(
     var saldo: Int = 0,
 
     @Column(nullable = false)
-    var total: Int = 0
+    var total: Int = 0,
+
+    @Column(name = "negocio_id", nullable = false, columnDefinition = "uuid")
+    val negocioId: UUID = UUID(0, 0)
 )

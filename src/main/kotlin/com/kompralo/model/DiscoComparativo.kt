@@ -24,6 +24,9 @@ data class DiscoComparativo(
     @Column(name = "creado_en", nullable = false, updatable = false)
     val creadoEn: LocalDateTime = LocalDateTime.now(),
 
+    @Column(name = "negocio_id", nullable = false, columnDefinition = "uuid")
+    val negocioId: UUID = UUID(0, 0),
+
     @OneToMany(mappedBy = "comparativo", cascade = [CascadeType.ALL], orphanRemoval = true)
     val lineas: MutableList<DiscoLineaComparativo> = mutableListOf()
 )
@@ -53,5 +56,8 @@ data class DiscoLineaComparativo(
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "comparativo_id", nullable = false)
-    var comparativo: DiscoComparativo? = null
+    var comparativo: DiscoComparativo? = null,
+
+    @Column(name = "negocio_id", nullable = false, columnDefinition = "uuid")
+    val negocioId: UUID = UUID(0, 0)
 )

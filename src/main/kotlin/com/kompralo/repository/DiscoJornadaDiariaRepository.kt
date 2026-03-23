@@ -9,4 +9,7 @@ import java.util.UUID
 interface DiscoJornadaDiariaRepository : JpaRepository<DiscoJornadaDiaria, UUID> {
     fun findByFecha(fecha: String): DiscoJornadaDiaria?
     fun findAllByOrderByCerradoEnDesc(): List<DiscoJornadaDiaria>
+
+    fun findByNegocioIdAndFecha(negocioId: UUID, fecha: String): DiscoJornadaDiaria?
+    fun findByNegocioIdOrderByCerradoEnDesc(negocioId: UUID): List<DiscoJornadaDiaria>
 }

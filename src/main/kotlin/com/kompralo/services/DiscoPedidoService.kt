@@ -1,5 +1,6 @@
 package com.kompralo.services
 
+import com.kompralo.config.TenantContext
 import com.kompralo.dto.*
 import com.kompralo.model.*
 import com.kompralo.repository.*
@@ -20,8 +21,11 @@ class DiscoPedidoService(
     private val promocionRepo: DiscoPromocionRepository,
     private val partidaBillarRepo: DiscoPartidaBillarRepository,
     private val jornadaDiariaRepo: DiscoJornadaDiariaRepository,
-    private val socketIO: SocketIOService
+    private val socketIO: SocketIOService,
+    private val tenantContext: TenantContext
 ) {
+
+    private val tenantId: String get() = tenantContext.getNegocioId().toString()
 
     // El "día" cambia a las 6AM Colombia, no a medianoche.
     // Así una jornada nocturna (ej: 2PM a 3AM) queda en una sola fecha.
@@ -33,6 +37,7 @@ class DiscoPedidoService(
 
     @Transactional
     fun atenderMesa(mesaId: UUID, req: DiscoAtenderMesaRequest): DiscoMesaResponse {
+        val negocioId = tenantContext.getNegocioId()
         val mesa = mesaRepo.findById(mesaId)
             .orElseThrow { RuntimeException("Mesa no encontrada") }
         val mesero = meseroRepo.findById(req.meseroId)
@@ -46,20 +51,21 @@ class DiscoPedidoService(
         mesa.mesero = mesero
         mesa.nombreCliente = req.nombreCliente
 
-        val cuentaExistente = cuentaRepo.findByMesaIdAndEstado(mesaId, "ABIERTA")
+        val cuentaExistente = cuentaRepo.findByNegocioIdAndMesaIdAndEstado(negocioId, mesaId, "ABIERTA")
         if (cuentaExistente == null) {
             val cuenta = DiscoCuentaMesa(
                 mesa = mesa,
                 mesero = mesero,
                 nombreCliente = req.nombreCliente,
-                jornadaFecha = hoy
+                jornadaFecha = hoy,
+                negocioId = negocioId
             )
             cuentaRepo.saveAndFlush(cuenta)
         }
 
         val response = mesaRepo.saveAndFlush(mesa).toResponse()
-        socketIO.sendToAdmin("mesa_ocupada", response)
-        socketIO.sendToAllMeseros("mesa_actualizada", response)
+        socketIO.sendToAdmin("mesa_ocupada", response, tenantId)
+        socketIO.sendToAllMeseros("mesa_actualizada", response, tenantId)
         return response
     }
 
@@ -75,6 +81,7 @@ class DiscoPedidoService(
 
     @Transactional
     fun crearPedido(req: DiscoPedidoRequest): DiscoPedidoResponse {
+        val negocioId = tenantContext.getNegocioId()
         val mesa = mesaRepo.findById(req.mesaId)
             .orElseThrow { RuntimeException("Mesa no encontrada") }
         val mesero = meseroRepo.findById(req.meseroId)
@@ -84,9 +91,9 @@ class DiscoPedidoService(
             throw IllegalStateException("Este mesero no está atendiendo esta mesa")
         }
 
-        val ticketDia = (pedidoRepo.countByJornadaFecha(hoy) + 1).toInt()
+        val ticketDia = (pedidoRepo.countByNegocioIdAndJornadaFecha(negocioId, hoy) + 1).toInt()
 
-        val cuenta = cuentaRepo.findByMesaIdAndEstado(mesa.id!!, "ABIERTA")
+        val cuenta = cuentaRepo.findByNegocioIdAndMesaIdAndEstado(negocioId, mesa.id!!, "ABIERTA")
             ?: throw IllegalStateException("No hay cuenta abierta para esta mesa")
 
         val pedido = DiscoPedido(
@@ -95,7 +102,8 @@ class DiscoPedidoService(
             ticketDia = ticketDia,
             jornadaFecha = hoy,
             nota = req.nota,
-            cuenta = cuenta
+            cuenta = cuenta,
+            negocioId = negocioId
         )
 
         var totalPedido = 0
@@ -110,7 +118,8 @@ class DiscoPedidoService(
                 nombre = producto.nombre,
                 precioUnitario = producto.precio,
                 cantidad = lReq.cantidad,
-                total = lineaTotal
+                total = lineaTotal,
+                negocioId = negocioId
             )
             linea.pedido = pedido
             pedido.lineas.add(linea)
@@ -119,12 +128,13 @@ class DiscoPedidoService(
         pedido.total = totalPedido
         val saved = pedidoRepo.saveAndFlush(pedido)
         val response = saved.toResponse()
-        socketIO.sendToAdmin("nuevo_pedido", response)
+        socketIO.sendToAdmin("nuevo_pedido", response, tenantId)
         return response
     }
 
     @Transactional
     fun despacharPedido(pedidoId: UUID): DiscoPedidoResponse {
+        val negocioId = tenantContext.getNegocioId()
         val pedido = pedidoRepo.findById(pedidoId)
             .orElseThrow { RuntimeException("Pedido no encontrado") }
 
@@ -136,7 +146,7 @@ class DiscoPedidoService(
         pedido.despachadoEn = LocalDateTime.now()
 
         val cuenta = pedido.cuenta
-            ?: cuentaRepo.findByMesaIdAndEstado(pedido.mesa.id!!, "ABIERTA")
+            ?: cuentaRepo.findByNegocioIdAndMesaIdAndEstadoForUpdate(negocioId, pedido.mesa.id!!, "ABIERTA")
             ?: throw RuntimeException("No hay cuenta abierta para esta mesa")
 
         if (!pedido.esCortesia) {
@@ -145,8 +155,8 @@ class DiscoPedidoService(
         cuentaRepo.saveAndFlush(cuenta)
 
         val response = pedidoRepo.saveAndFlush(pedido).toResponse()
-        pedido.mesero?.id?.let { socketIO.sendToMesero(it.toString(), "pedido_despachado", response) }
-        socketIO.sendToAdmin("pedido_despachado", response)
+        pedido.mesero?.id?.let { socketIO.sendToMesero(it.toString(), "pedido_despachado", response, tenantId) }
+        socketIO.sendToAdmin("pedido_despachado", response, tenantId)
 
         if (!pedido.esCortesia && pedido.mesero != null) {
             aplicarPromosAutomaticas(pedido.mesa, pedido.mesero!!, cuenta)
@@ -156,7 +166,8 @@ class DiscoPedidoService(
     }
 
     private fun aplicarPromosAutomaticas(mesa: DiscoMesa, mesero: DiscoMesero, cuenta: DiscoCuentaMesa) {
-        val promosActivas = promocionRepo.findByActivaTrue()
+        val negocioId = tenantContext.getNegocioId()
+        val promosActivas = promocionRepo.findByNegocioIdAndActivaTrue(negocioId)
         if (promosActivas.isEmpty()) return
 
         val pedidosRegulares = pedidoRepo.findByCuentaIdAndEsCortesiaFalseAndEstado(
@@ -202,7 +213,7 @@ class DiscoPedidoService(
             val nuevasCortesias = cortesiasCalificadas - cortesiasYaDadas
             if (nuevasCortesias <= 0) return@forEach
 
-            val ticketDia = (pedidoRepo.countByJornadaFecha(cuenta.jornadaFecha) + 1).toInt()
+            val ticketDia = (pedidoRepo.countByNegocioIdAndJornadaFecha(negocioId, cuenta.jornadaFecha) + 1).toInt()
 
             val cortesiaPedido = DiscoPedido(
                 mesa = mesa,
@@ -214,7 +225,8 @@ class DiscoPedidoService(
                 esCortesia = true,
                 promo = promo,
                 nota = "Cortesia: ${promo.nombre}",
-                cuenta = cuenta
+                cuenta = cuenta,
+                negocioId = negocioId
             )
 
             val regaloProducto = promo.regaloProducto
@@ -225,7 +237,8 @@ class DiscoPedidoService(
                 nombre = regaloProducto.nombre,
                 precioUnitario = regaloProducto.precio,
                 cantidad = nuevasCortesias,
-                total = lineaTotal
+                total = lineaTotal,
+                negocioId = negocioId
             )
             linea.pedido = cortesiaPedido
             cortesiaPedido.lineas.add(linea)
@@ -235,8 +248,8 @@ class DiscoPedidoService(
             descuentoTotal += lineaTotal
 
             val cortesiaResponse = cortesiaPedido.toResponse()
-            socketIO.sendToAdmin("cortesia_aplicada", cortesiaResponse)
-            socketIO.sendToMesero(mesero.id.toString(), "cortesia_aplicada", cortesiaResponse)
+            socketIO.sendToAdmin("cortesia_aplicada", cortesiaResponse, tenantId)
+            socketIO.sendToMesero(mesero.id.toString(), "cortesia_aplicada", cortesiaResponse, tenantId)
         }
 
         if (descuentoTotal > 0) {
@@ -248,6 +261,7 @@ class DiscoPedidoService(
 
     @Transactional
     fun cancelarPedido(pedidoId: UUID): DiscoPedidoResponse {
+        val negocioId = tenantContext.getNegocioId()
         val pedido = pedidoRepo.findById(pedidoId)
             .orElseThrow { RuntimeException("Pedido no encontrado") }
 
@@ -257,7 +271,7 @@ class DiscoPedidoService(
 
         if (pedido.estado == "DESPACHADO") {
             val cuenta = pedido.cuenta?.takeIf { it.estado == "ABIERTA" }
-                ?: cuentaRepo.findByMesaIdAndEstado(pedido.mesa.id!!, "ABIERTA")
+                ?: cuentaRepo.findByNegocioIdAndMesaIdAndEstadoForUpdate(negocioId, pedido.mesa.id!!, "ABIERTA")
             if (cuenta != null) {
                 if (!pedido.esCortesia) {
                     cuenta.total -= pedido.total
@@ -289,13 +303,14 @@ class DiscoPedidoService(
         }
 
         val response = pedido.toResponse()
-        pedido.mesero?.id?.let { socketIO.sendToMesero(it.toString(), "pedido_cancelado", response) }
-        socketIO.sendToAdmin("pedido_cancelado", response)
+        pedido.mesero?.id?.let { socketIO.sendToMesero(it.toString(), "pedido_cancelado", response, tenantId) }
+        socketIO.sendToAdmin("pedido_cancelado", response, tenantId)
         return response
     }
 
     private fun recalcularCortesias(mesa: DiscoMesa, mesero: DiscoMesero, cuenta: DiscoCuentaMesa) {
-        val promosActivas = promocionRepo.findByActivaTrue()
+        val negocioId = tenantContext.getNegocioId()
+        val promosActivas = promocionRepo.findByNegocioIdAndActivaTrue(negocioId)
         if (promosActivas.isEmpty()) return
 
         val pedidosRegulares = pedidoRepo.findByCuentaIdAndEsCortesiaFalseAndEstado(
@@ -339,7 +354,7 @@ class DiscoPedidoService(
                     c.canceladoEn = LocalDateTime.now()
                     pedidoRepo.saveAndFlush(c)
                     porCancelar -= c.lineas.sumOf { it.cantidad }
-                    socketIO.sendToAdmin("cortesia_cancelada", c.toResponse())
+                    socketIO.sendToAdmin("cortesia_cancelada", c.toResponse(), tenantId)
                 }
             }
         }
@@ -352,6 +367,7 @@ class DiscoPedidoService(
 
     @Transactional
     fun editarPedido(pedidoId: UUID, req: DiscoPedidoRequest): DiscoPedidoResponse {
+        val negocioId = tenantContext.getNegocioId()
         val pedido = pedidoRepo.findById(pedidoId)
             .orElseThrow { RuntimeException("Pedido no encontrado") }
 
@@ -374,7 +390,8 @@ class DiscoPedidoService(
                 nombre = producto.nombre,
                 precioUnitario = producto.precio,
                 cantidad = lReq.cantidad,
-                total = lineaTotal
+                total = lineaTotal,
+                negocioId = negocioId
             )
             linea.pedido = pedido
             pedido.lineas.add(linea)
@@ -384,7 +401,7 @@ class DiscoPedidoService(
 
         if (pedido.estado == "DESPACHADO") {
             val cuenta = pedido.cuenta?.takeIf { it.estado == "ABIERTA" }
-                ?: cuentaRepo.findByMesaIdAndEstado(pedido.mesa.id!!, "ABIERTA")
+                ?: cuentaRepo.findByNegocioIdAndMesaIdAndEstadoForUpdate(negocioId, pedido.mesa.id!!, "ABIERTA")
             if (cuenta != null) {
                 cuenta.total = cuenta.total - totalAnterior + nuevoTotal
                 cuentaRepo.saveAndFlush(cuenta)
@@ -396,7 +413,8 @@ class DiscoPedidoService(
 
     @Transactional
     fun aplicarPromos(mesaId: UUID): DiscoCuentaMesaResponse {
-        val cuenta = cuentaRepo.findByMesaIdAndEstado(mesaId, "ABIERTA")
+        val negocioId = tenantContext.getNegocioId()
+        val cuenta = cuentaRepo.findByNegocioIdAndMesaIdAndEstado(negocioId, mesaId, "ABIERTA")
             ?: throw RuntimeException("No hay cuenta abierta para esta mesa")
 
         cuenta.mesero?.let { aplicarPromosAutomaticas(cuenta.mesa, it, cuenta) }
@@ -412,7 +430,8 @@ class DiscoPedidoService(
 
     @Transactional
     fun pagarCuenta(mesaId: UUID): DiscoCuentaMesaResponse {
-        val cuenta = cuentaRepo.findByMesaIdAndEstado(mesaId, "ABIERTA")
+        val negocioId = tenantContext.getNegocioId()
+        val cuenta = cuentaRepo.findByNegocioIdAndMesaIdAndEstado(negocioId, mesaId, "ABIERTA")
             ?: throw RuntimeException("No hay cuenta abierta para esta mesa")
 
         val pedidosRegulares = pedidoRepo.findByCuentaIdAndEsCortesiaFalseAndEstado(
@@ -433,32 +452,39 @@ class DiscoPedidoService(
 
         val todosPedidos = pedidosRegulares + pedidosCortesia
         val response = cuenta.toResponse(todosPedidos)
-        cuenta.mesero?.id?.let { socketIO.sendToMesero(it.toString(), "cuenta_pagada", response) }
-        socketIO.sendToAdmin("cuenta_pagada", response)
+        cuenta.mesero?.id?.let { socketIO.sendToMesero(it.toString(), "cuenta_pagada", response, tenantId) }
+        socketIO.sendToAdmin("cuenta_pagada", response, tenantId)
         socketIO.sendToAllMeseros("mesa_actualizada", DiscoMesaResponse(
             id = cuenta.mesa.id!!,
             numero = cuenta.mesa.numero,
             nombre = cuenta.mesa.nombre,
             estado = "LIBRE"
-        ))
+        ), tenantId)
         return response
     }
 
     @Transactional(readOnly = true)
-    fun getPedidosHoy(): List<DiscoPedidoResponse> =
-        pedidoRepo.findByJornadaFechaOrderByCreadoEnDesc(hoy).map { it.toResponse() }
+    fun getPedidosHoy(): List<DiscoPedidoResponse> {
+        val negocioId = tenantContext.getNegocioId()
+        return pedidoRepo.findByNegocioIdAndJornadaFechaOrderByCreadoEnDesc(negocioId, hoy).map { it.toResponse() }
+    }
 
     @Transactional(readOnly = true)
-    fun getPedidosPendientes(): List<DiscoPedidoResponse> =
-        pedidoRepo.findByEstado("PENDIENTE").map { it.toResponse() }
+    fun getPedidosPendientes(): List<DiscoPedidoResponse> {
+        val negocioId = tenantContext.getNegocioId()
+        return pedidoRepo.findByNegocioIdAndEstado(negocioId, "PENDIENTE").map { it.toResponse() }
+    }
 
     @Transactional(readOnly = true)
-    fun getPedidosPorMesa(mesaId: UUID): List<DiscoPedidoResponse> =
-        pedidoRepo.findByMesaIdAndEstado(mesaId, "DESPACHADO").map { it.toResponse() }
+    fun getPedidosPorMesa(mesaId: UUID): List<DiscoPedidoResponse> {
+        val negocioId = tenantContext.getNegocioId()
+        return pedidoRepo.findByNegocioIdAndMesaIdAndEstado(negocioId, mesaId, "DESPACHADO").map { it.toResponse() }
+    }
 
     @Transactional(readOnly = true)
     fun getCuentaMesa(mesaId: UUID): DiscoCuentaMesaResponse? {
-        val cuenta = cuentaRepo.findByMesaIdAndEstado(mesaId, "ABIERTA") ?: return null
+        val negocioId = tenantContext.getNegocioId()
+        val cuenta = cuentaRepo.findByNegocioIdAndMesaIdAndEstado(negocioId, mesaId, "ABIERTA") ?: return null
         val pedidosRegulares = pedidoRepo.findByCuentaIdAndEsCortesiaFalseAndEstado(
             cuenta.id!!, "DESPACHADO"
         )
@@ -470,22 +496,23 @@ class DiscoPedidoService(
 
     @Transactional(readOnly = true)
     fun getResumenDia(): DiscoResumenDiaResponse {
+        val negocioId = tenantContext.getNegocioId()
         val fecha = hoy
 
-        val cuentasHoy = cuentaRepo.findByJornadaFechaOrderByCreadoEnDesc(fecha)
+        val cuentasHoy = cuentaRepo.findByNegocioIdAndJornadaFechaOrderByCreadoEnDesc(negocioId, fecha)
         val cuentasPagadas = cuentasHoy.filter { it.estado == "PAGADA" }
         val cuentasAbiertas = cuentasHoy.filter { it.estado == "ABIERTA" }
 
         val totalVentas = cuentasPagadas.sumOf { it.total - it.descuentoPromo }
 
-        val ticketsTotales = pedidoRepo.countByJornadaFecha(fecha).toInt()
+        val ticketsTotales = pedidoRepo.countByNegocioIdAndJornadaFecha(negocioId, fecha).toInt()
         val mesasAtendidas = cuentasHoy.map { it.mesa.id }.distinct().size
 
-        val partidasHoy = partidaBillarRepo.findByJornadaFechaOrderByCreadoEnDesc(fecha)
+        val partidasHoy = partidaBillarRepo.findByNegocioIdAndJornadaFechaOrderByCreadoEnDesc(negocioId, fecha)
         val partidasFinalizadas = partidasHoy.filter { it.estado == "FINALIZADA" }
         val totalBillar = partidasFinalizadas.sumOf { it.total ?: 0 }
 
-        val jornadaCerrada = jornadaDiariaRepo.findByFecha(fecha) != null
+        val jornadaCerrada = jornadaDiariaRepo.findByNegocioIdAndFecha(negocioId, fecha) != null
 
         return DiscoResumenDiaResponse(
             fecha = fecha,
@@ -502,18 +529,21 @@ class DiscoPedidoService(
     }
 
     @Transactional(readOnly = true)
-    fun getHistorialJornadas(): List<DiscoResumenJornadaResponse> =
-        jornadaDiariaRepo.findAllByOrderByCerradoEnDesc().map { it.toResponse() }
+    fun getHistorialJornadas(): List<DiscoResumenJornadaResponse> {
+        val negocioId = tenantContext.getNegocioId()
+        return jornadaDiariaRepo.findByNegocioIdOrderByCerradoEnDesc(negocioId).map { it.toResponse() }
+    }
 
     @Transactional
     fun cerrarJornada(): DiscoResumenJornadaResponse {
+        val negocioId = tenantContext.getNegocioId()
         val fecha = hoy
 
-        jornadaDiariaRepo.findByFecha(fecha)?.let {
+        jornadaDiariaRepo.findByNegocioIdAndFecha(negocioId, fecha)?.let {
             throw IllegalStateException("La jornada de hoy ya fue cerrada")
         }
 
-        val cuentasAbiertas = cuentaRepo.findByJornadaFechaOrderByCreadoEnDesc(fecha)
+        val cuentasAbiertas = cuentaRepo.findByNegocioIdAndJornadaFechaOrderByCreadoEnDesc(negocioId, fecha)
             .filter { it.estado == "ABIERTA" }
         if (cuentasAbiertas.isNotEmpty()) {
             throw IllegalStateException("Hay ${cuentasAbiertas.size} cuenta(s) abierta(s). Ciérrelas antes de cerrar la jornada.")
@@ -529,7 +559,8 @@ class DiscoPedidoService(
             cuentasCerradas = resumen.cuentasCerradas,
             ticketsTotales = resumen.ticketsTotales,
             mesasAtendidas = resumen.mesasAtendidas,
-            partidasBillar = resumen.partidasBillar
+            partidasBillar = resumen.partidasBillar,
+            negocioId = negocioId
         )
 
         val saved = jornadaDiariaRepo.saveAndFlush(jornada)
@@ -540,7 +571,8 @@ class DiscoPedidoService(
 
     @Transactional(readOnly = true)
     fun getCuentasHoy(): List<DiscoCuentaMesaResponse> {
-        val cuentas = cuentaRepo.findByJornadaFechaOrderByCreadoEnDesc(hoy)
+        val negocioId = tenantContext.getNegocioId()
+        val cuentas = cuentaRepo.findByNegocioIdAndJornadaFechaOrderByCreadoEnDesc(negocioId, hoy)
         return cuentas.map { cuenta ->
             val pedidos = pedidoRepo.findByCuentaIdAndEstado(cuenta.id!!, "DESPACHADO")
             cuenta.toResponse(pedidos)
