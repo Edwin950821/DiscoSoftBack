@@ -204,15 +204,12 @@ class AuthService(
                 val token = jwtService.generateToken(user.email, user.role.name)
                 return toAuthResponse(user, token)
             }
-            if (request.isLogin) {
-                var needsSave = false
-                if (user.authProvider == null) { user.authProvider = "google"; needsSave = true }
-                if (user.image == null && !request.picture.isNullOrBlank() && user.role == Role.USER) { user.image = request.picture; needsSave = true }
-                if (needsSave) userRepository.save(user)
-                val token = jwtService.generateToken(user.email, user.role.name)
-                return toAuthResponse(user, token)
-            }
-            throw IllegalArgumentException("Este correo ya está registrado")
+            var needsSave = false
+            if (user.authProvider == null) { user.authProvider = "google"; needsSave = true }
+            if (user.image == null && !request.picture.isNullOrBlank() && user.role == Role.USER) { user.image = request.picture; needsSave = true }
+            if (needsSave) userRepository.save(user)
+            val token = jwtService.generateToken(user.email, user.role.name)
+            return toAuthResponse(user, token)
         }
 
         if (request.isLogin) {
