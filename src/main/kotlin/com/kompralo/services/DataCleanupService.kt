@@ -42,11 +42,11 @@ class DataCleanupService(
             "DELETE FROM disco_pedidos WHERE creado_en < :fecha",
             "DELETE FROM disco_cuenta_mesa WHERE creado_en < :fecha",
             // DISCO: Billar
-            "DELETE FROM disco_billar_partidas WHERE creado_en < :fecha",
+            "DELETE FROM disco_partidas_billar WHERE creado_en < :fecha",
             // DISCO: Jornadas
             "DELETE FROM disco_mesero_jornada WHERE jornada_id IN (SELECT id FROM disco_jornadas WHERE creado_en < :fecha)",
             "DELETE FROM disco_jornadas WHERE creado_en < :fecha",
-            "DELETE FROM disco_resumen_jornada WHERE creado_en < :fecha",
+            "DELETE FROM disco_jornada_diaria WHERE cerrado_en < :fecha",
             // DISCO: Inventarios
             "DELETE FROM disco_linea_inventario WHERE inventario_id IN (SELECT id FROM disco_inventarios WHERE creado_en < :fecha)",
             "DELETE FROM disco_inventarios WHERE creado_en < :fecha",
