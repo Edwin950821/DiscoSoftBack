@@ -28,7 +28,8 @@ class SecurityConfig(
 
     @Bean
     fun securityFilterChain(http: HttpSecurity): SecurityFilterChain {
-        val csrfTokenRepository = CookieCsrfTokenRepository.withHttpOnlyFalse()
+        val csrfTokenRepository = CookieCsrfTokenRepository()
+        csrfTokenRepository.setCookieHttpOnly(true)
         val csrfHandler = CsrfTokenRequestAttributeHandler()
         csrfHandler.setCsrfRequestAttributeName(null)
 
@@ -60,8 +61,18 @@ class SecurityConfig(
                 headers.httpStrictTransportSecurity { hsts ->
                     hsts.includeSubDomains(true)
                     hsts.maxAgeInSeconds(31536000)
+                    hsts.preload(true)
                 }
                 headers.cacheControl { }
+                headers.contentSecurityPolicy { csp ->
+                    csp.policyDirectives("default-src 'self'; frame-ancestors 'none'; form-action 'self'; object-src 'none'")
+                }
+                headers.referrerPolicy { ref ->
+                    ref.policy(org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN)
+                }
+                headers.permissionsPolicy { pp ->
+                    pp.policy("camera=(), microphone=(), geolocation=()")
+                }
             }
             .authorizeHttpRequests { auth ->
                 auth
