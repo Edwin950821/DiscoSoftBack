@@ -4,12 +4,13 @@
 
 CREATE TABLE IF NOT EXISTS disco_mesas_billar (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    numero          INT NOT NULL UNIQUE,
+    numero          INT NOT NULL,
     nombre          VARCHAR(255) NOT NULL,
     precio_por_hora INT NOT NULL DEFAULT 20000,
     estado          VARCHAR(20) NOT NULL DEFAULT 'LIBRE',
     activo          BOOLEAN NOT NULL DEFAULT TRUE,
-    creado_en       TIMESTAMP NOT NULL DEFAULT NOW()
+    creado_en       TIMESTAMP NOT NULL DEFAULT NOW(),
+    negocio_id      UUID NULL
 );
 
 CREATE TABLE IF NOT EXISTS disco_partidas_billar (
@@ -23,9 +24,16 @@ CREATE TABLE IF NOT EXISTS disco_partidas_billar (
     total           INT,
     estado          VARCHAR(20) NOT NULL DEFAULT 'EN_JUEGO',
     jornada_fecha   VARCHAR(10) NOT NULL,
-    creado_en       TIMESTAMP NOT NULL DEFAULT NOW()
+    creado_en       TIMESTAMP NOT NULL DEFAULT NOW(),
+    negocio_id      UUID NULL
 );
+
+-- UNIQUE por negocio, no global
+ALTER TABLE disco_mesas_billar
+  ADD CONSTRAINT disco_mesas_billar_negocio_numero_unique UNIQUE (negocio_id, numero);
 
 CREATE INDEX IF NOT EXISTS idx_partidas_billar_mesa ON disco_partidas_billar(mesa_billar_id);
 CREATE INDEX IF NOT EXISTS idx_partidas_billar_fecha ON disco_partidas_billar(jornada_fecha);
 CREATE INDEX IF NOT EXISTS idx_partidas_billar_estado ON disco_partidas_billar(estado);
+CREATE INDEX IF NOT EXISTS idx_mesas_billar_negocio ON disco_mesas_billar(negocio_id);
+CREATE INDEX IF NOT EXISTS idx_partidas_billar_negocio ON disco_partidas_billar(negocio_id);
