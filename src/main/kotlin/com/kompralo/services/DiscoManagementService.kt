@@ -1,5 +1,7 @@
 package com.kompralo.services
 
+import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import com.fasterxml.jackson.module.kotlin.readValue
 import com.kompralo.dto.*
 import com.kompralo.model.*
 import com.kompralo.repository.*
@@ -7,6 +9,8 @@ import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.util.UUID
+
+private val objectMapper = jacksonObjectMapper()
 
 @Service
 class DiscoManagementService(
@@ -144,7 +148,12 @@ class DiscoManagementService(
                 pagosQR = mReq.pagos["QR"] ?: 0,
                 pagosNequi = mReq.pagos["Nequi"] ?: 0,
                 pagosDatafono = mReq.pagos["Datafono"] ?: 0,
-                pagosVales = mReq.pagos["Vales"] ?: 0
+                pagosVales = mReq.pagos["Vales"] ?: 0,
+                transaccionesDetalle = if (mReq.transaccionesDetalle.isNotEmpty()) objectMapper.writeValueAsString(mReq.transaccionesDetalle) else null,
+                valesDetalle = if (mReq.valesDetalle.isNotEmpty()) objectMapper.writeValueAsString(mReq.valesDetalle) else null,
+                cortesiasDetalle = if (mReq.cortesiasDetalle.isNotEmpty()) objectMapper.writeValueAsString(mReq.cortesiasDetalle) else null,
+                gastosDetalle = if (mReq.gastosDetalle.isNotEmpty()) objectMapper.writeValueAsString(mReq.gastosDetalle) else null,
+                lineasDetalle = if (mReq.lineas.isNotEmpty()) objectMapper.writeValueAsString(mReq.lineas) else null
             )
             meseroJornada.jornada = jornada
             jornada.meseros.add(meseroJornada)
@@ -263,7 +272,12 @@ class DiscoManagementService(
             "Nequi" to pagosNequi,
             "Datafono" to pagosDatafono,
             "Vales" to pagosVales
-        )
+        ),
+        transaccionesDetalle = transaccionesDetalle?.let { objectMapper.readValue<List<TransaccionDetalleDTO>>(it) } ?: emptyList(),
+        valesDetalle = valesDetalle?.let { objectMapper.readValue<List<ValeDetalleDTO>>(it) } ?: emptyList(),
+        cortesiasDetalle = cortesiasDetalle?.let { objectMapper.readValue<List<CortesiaDetalleDTO>>(it) } ?: emptyList(),
+        gastosDetalle = gastosDetalle?.let { objectMapper.readValue<List<GastoDetalleDTO>>(it) } ?: emptyList(),
+        lineas = lineasDetalle?.let { objectMapper.readValue<List<LineaDetalleDTO>>(it) } ?: emptyList()
     )
 
     private fun DiscoInventario.toResponse() = DiscoInventarioResponse(

@@ -45,6 +45,35 @@ data class DiscoMeseroResponse(
 
 // ─── Jornada ───
 
+data class TransaccionDetalleDTO(
+    val tipo: String = "",
+    val concepto: String = "",
+    val monto: Int = 0
+)
+
+data class ValeDetalleDTO(
+    val tercero: String = "",
+    val monto: Int = 0
+)
+
+data class CortesiaDetalleDTO(
+    val concepto: String = "",
+    val monto: Int = 0
+)
+
+data class GastoDetalleDTO(
+    val concepto: String = "",
+    val monto: Int = 0
+)
+
+data class LineaDetalleDTO(
+    val productoId: String = "",
+    val nombre: String = "",
+    val precioUnitario: Int = 0,
+    val cantidad: Int = 0,
+    val total: Int = 0
+)
+
 data class DiscoMeseroJornadaRequest(
     val meseroId: UUID,
     val nombre: String,
@@ -53,7 +82,12 @@ data class DiscoMeseroJornadaRequest(
     val totalMesero: Int = 0,
     val cortesias: Int = 0,
     val gastos: Int = 0,
-    val pagos: Map<String, Int> = emptyMap()
+    val pagos: Map<String, Int> = emptyMap(),
+    val transaccionesDetalle: List<TransaccionDetalleDTO> = emptyList(),
+    val valesDetalle: List<ValeDetalleDTO> = emptyList(),
+    val cortesiasDetalle: List<CortesiaDetalleDTO> = emptyList(),
+    val gastosDetalle: List<GastoDetalleDTO> = emptyList(),
+    val lineas: List<LineaDetalleDTO> = emptyList()
 )
 
 data class DiscoMeseroJornadaResponse(
@@ -64,7 +98,12 @@ data class DiscoMeseroJornadaResponse(
     val totalMesero: Int,
     val cortesias: Int,
     val gastos: Int,
-    val pagos: Map<String, Int>
+    val pagos: Map<String, Int>,
+    val transaccionesDetalle: List<TransaccionDetalleDTO> = emptyList(),
+    val valesDetalle: List<ValeDetalleDTO> = emptyList(),
+    val cortesiasDetalle: List<CortesiaDetalleDTO> = emptyList(),
+    val gastosDetalle: List<GastoDetalleDTO> = emptyList(),
+    val lineas: List<LineaDetalleDTO> = emptyList()
 )
 
 data class DiscoJornadaRequest(

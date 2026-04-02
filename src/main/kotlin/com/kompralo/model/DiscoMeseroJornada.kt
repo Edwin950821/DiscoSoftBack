@@ -51,5 +51,20 @@ data class DiscoMeseroJornada(
     var pagosDatafono: Int = 0,
 
     @Column(name = "pagos_vales", nullable = false)
-    var pagosVales: Int = 0
+    var pagosVales: Int = 0,
+
+    @Column(name = "transacciones_detalle", columnDefinition = "TEXT")
+    var transaccionesDetalle: String? = null,
+
+    @Column(name = "vales_detalle", columnDefinition = "TEXT")
+    var valesDetalle: String? = null,
+
+    @Column(name = "cortesias_detalle", columnDefinition = "TEXT")
+    var cortesiasDetalle: String? = null,
+
+    @Column(name = "gastos_detalle", columnDefinition = "TEXT")
+    var gastosDetalle: String? = null,
+
+    @Column(name = "lineas_detalle", columnDefinition = "TEXT")
+    var lineasDetalle: String? = null
 )
