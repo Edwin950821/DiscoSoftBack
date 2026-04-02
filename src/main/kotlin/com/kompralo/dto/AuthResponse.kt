@@ -41,15 +41,6 @@ data class SubscriptionResponse(
     val is_active: Boolean = true
 )
 
-data class GoogleLoginRequest(
-    val credential: String
-)
-
-data class GoogleRegisterRequest(
-    val credential: String,
-    val accountType: String
-)
-
 data class UpdateProfilePictureRequest(
     val imageUrl: String
 )
@@ -59,18 +50,3 @@ data class ChangePasswordRequest(
     val newPassword: String
 )
 
-data class GoogleRegisterWithTokenRequest(
-    val access_token: String? = null,
-    val accessToken: String? = null,
-    val email: String,
-    val name: String,
-    val googleId: String? = null,
-    val sub: String? = null,
-    val accountType: String,
-    val isLogin: Boolean = false,
-    val picture: String? = null
-) {
-    fun getToken(): String = access_token ?: accessToken ?: ""
-
-    fun getGoogleIdValue(): String = googleId ?: sub ?: ""
-}

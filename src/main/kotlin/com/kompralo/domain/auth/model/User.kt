@@ -4,6 +4,7 @@ import com.kompralo.domain.auth.valueobject.Email
 import com.kompralo.domain.auth.valueobject.Password
 import com.kompralo.domain.auth.valueobject.Role
 import java.time.LocalDateTime
+import java.util.UUID
 
 data class User(
     val id: Long?,
@@ -13,7 +14,8 @@ data class User(
     val role: Role,
     val isActive: Boolean = true,
     val createdAt: LocalDateTime = LocalDateTime.now(),
-    val updatedAt: LocalDateTime = LocalDateTime.now()
+    val updatedAt: LocalDateTime = LocalDateTime.now(),
+    var negocioId: UUID? = null
 ) {
     init {
         require(name.isNotBlank()) { "Nombre no puede estar vacío" }

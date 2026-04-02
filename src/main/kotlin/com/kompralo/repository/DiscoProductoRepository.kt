@@ -11,4 +11,8 @@ interface DiscoProductoRepository : JpaRepository<DiscoProducto, UUID> {
     fun findAllByOrderByCreadoEnDesc(): List<DiscoProducto>
 
     fun findByActivoTrue(): List<DiscoProducto>
+
+    fun findByNegocioIdOrderByCreadoEnDesc(negocioId: UUID): List<DiscoProducto>
+
+    fun findByNegocioIdAndActivoTrue(negocioId: UUID): List<DiscoProducto>
 }

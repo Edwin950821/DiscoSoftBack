@@ -85,7 +85,10 @@ data class User(
     var failedLoginAttempts: Int? = 0,
 
     @Column(name = "locked_until")
-    var lockedUntil: LocalDateTime? = null
+    var lockedUntil: LocalDateTime? = null,
+
+    @Column(name = "negocio_id", columnDefinition = "uuid")
+    val negocioId: UUID? = null
 ) {
 
     @PostLoad

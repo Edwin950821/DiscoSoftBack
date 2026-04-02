@@ -2,9 +2,12 @@ package com.kompralo.services
 
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
+import com.kompralo.config.TenantContext
 import com.kompralo.dto.*
 import com.kompralo.model.*
 import com.kompralo.repository.*
+import jakarta.persistence.EntityManager
+import jakarta.persistence.PersistenceContext
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -19,19 +22,33 @@ class DiscoManagementService(
     private val jornadaRepo: DiscoJornadaRepository,
     private val inventarioRepo: DiscoInventarioRepository,
     private val mesaRepo: DiscoMesaRepository,
+    private val comparativoRepo: DiscoComparativoRepository,
+    private val promocionRepo: DiscoPromocionRepository,
+    private val pedidoRepo: DiscoPedidoRepository,
+    private val cuentaRepo: DiscoCuentaMesaRepository,
     private val userRepository: UserRepository,
-    private val passwordEncoder: PasswordEncoder
+    private val passwordEncoder: PasswordEncoder,
+    private val tenantContext: TenantContext
 ) {
 
-    fun getAllProductos(): List<DiscoProductoResponse> =
-        productoRepo.findAllByOrderByCreadoEnDesc().map { it.toResponse() }
+    private val tenantId: String get() = tenantContext.getNegocioId().toString()
+
+    @PersistenceContext
+    private lateinit var entityManager: EntityManager
+
+    fun getAllProductos(): List<DiscoProductoResponse> {
+        val negocioId = tenantContext.getNegocioId()
+        return productoRepo.findByNegocioIdOrderByCreadoEnDesc(negocioId).map { it.toResponse() }
+    }
 
     @Transactional
     fun createProducto(req: DiscoProductoRequest): DiscoProductoResponse {
+        val negocioId = tenantContext.getNegocioId()
         val producto = DiscoProducto(
             nombre = req.nombre,
             precio = req.precio,
-            activo = req.activo
+            activo = req.activo,
+            negocioId = negocioId
         )
         return productoRepo.save(producto).toResponse()
     }
@@ -56,11 +73,15 @@ class DiscoManagementService(
         productoRepo.delete(producto)
     }
 
-    fun getAllMeseros(): List<DiscoMeseroResponse> =
-        meseroRepo.findAllByOrderByCreadoEnDesc().map { it.toResponse() }
+    fun getAllMeseros(): List<DiscoMeseroResponse> {
+        val negocioId = tenantContext.getNegocioId()
+        return meseroRepo.findByNegocioIdOrderByCreadoEnDesc(negocioId).map { it.toResponse() }
+    }
 
     @Transactional
     fun createMesero(req: DiscoMeseroRequest): DiscoMeseroResponse {
+        val negocioId = tenantContext.getNegocioId()
+
         if (!req.username.isNullOrBlank() && !req.password.isNullOrBlank()) {
             val uname = req.username.trim().lowercase()
             val email = "$uname@monastery.co"
@@ -78,7 +99,8 @@ class DiscoManagementService(
                 password = passwordEncoder.encode(req.password),
                 role = Role.MESERO,
                 isActive = true,
-                username = uname
+                username = uname,
+                negocioId = negocioId
             )
             userRepository.save(user)
         }
@@ -89,20 +111,71 @@ class DiscoManagementService(
             color = req.color,
             avatar = req.avatar,
             activo = req.activo,
-            username = uname
+            username = uname,
+            negocioId = negocioId
         )
         return meseroRepo.save(mesero).toResponse()
     }
 
     @Transactional
-    fun deleteMesero(id: UUID) {
-        val mesero = meseroRepo.findById(id)
-            .orElseThrow { RuntimeException("Mesero no encontrado con id: $id") }
-        meseroRepo.delete(mesero)
+    fun updateMesero(id: UUID, req: DiscoMeseroUpdateRequest): DiscoMeseroResponse {
+        val mesero = meseroRepo.findById(id).orElseThrow { IllegalArgumentException("Mesero no encontrado") }
+        req.nombre?.let { mesero.nombre = it }
+        req.color?.let { mesero.color = it }
+        req.avatar?.let { mesero.avatar = it }
+        req.activo?.let { mesero.activo = it }
+        val saved = meseroRepo.save(mesero)
+        return DiscoMeseroResponse(saved.id!!, saved.nombre, saved.color, saved.avatar, saved.activo, saved.username)
     }
 
-    fun getAllJornadas(): List<DiscoJornadaResponse> =
-        jornadaRepo.findAllByOrderByCreadoEnDesc().map { it.toResponse() }
+    @Transactional
+    fun deleteMesero(id: UUID) {
+        val negocioId = tenantContext.getNegocioId()
+
+        // Obtener username via SQL nativo — NO cargamos entidad JPA
+        @Suppress("UNCHECKED_CAST")
+        val result = entityManager.createNativeQuery(
+            "SELECT username FROM disco_meseros WHERE id = ?1 AND negocio_id = ?2"
+        ).setParameter(1, id).setParameter(2, negocioId).resultList as List<String?>
+
+        if (result.isEmpty()) {
+            throw RuntimeException("Mesero no encontrado con id: $id")
+        }
+        val username = result[0]
+
+        // SQL nativo en orden estricto — sin interferencia de Hibernate
+        entityManager.createNativeQuery(
+            "DELETE FROM disco_linea_pedido WHERE pedido_id IN (SELECT id FROM disco_pedidos WHERE mesero_id = ?1 AND negocio_id = ?2)"
+        ).setParameter(1, id).setParameter(2, negocioId).executeUpdate()
+
+        entityManager.createNativeQuery(
+            "DELETE FROM disco_pedidos WHERE mesero_id = ?1 AND negocio_id = ?2"
+        ).setParameter(1, id).setParameter(2, negocioId).executeUpdate()
+
+        entityManager.createNativeQuery(
+            "DELETE FROM disco_cuenta_mesa WHERE mesero_id = ?1 AND negocio_id = ?2"
+        ).setParameter(1, id).setParameter(2, negocioId).executeUpdate()
+
+        entityManager.createNativeQuery(
+            "UPDATE disco_mesas SET mesero_id = NULL WHERE mesero_id = ?1 AND negocio_id = ?2"
+        ).setParameter(1, id).setParameter(2, negocioId).executeUpdate()
+
+        entityManager.createNativeQuery(
+            "DELETE FROM disco_meseros WHERE id = ?1 AND negocio_id = ?2"
+        ).setParameter(1, id).setParameter(2, negocioId).executeUpdate()
+
+        // Eliminar usuario auth si existe
+        if (!username.isNullOrBlank()) {
+            entityManager.createNativeQuery(
+                "DELETE FROM auth_users WHERE username = ?1"
+            ).setParameter(1, username).executeUpdate()
+        }
+    }
+
+    fun getAllJornadas(): List<DiscoJornadaResponse> {
+        val negocioId = tenantContext.getNegocioId()
+        return jornadaRepo.findByNegocioIdOrderByCreadoEnDesc(negocioId).map { it.toResponse() }
+    }
 
     @Transactional
     fun createJornada(req: DiscoJornadaRequest): DiscoJornadaResponse {
@@ -120,6 +193,7 @@ class DiscoManagementService(
         val esperado = totalVendido - cortesias - gastos
         val saldo = totalRecibido - esperado
 
+        val negocioId = tenantContext.getNegocioId()
         val jornada = DiscoJornada(
             sesion = req.sesion,
             fecha = req.fecha,
@@ -132,7 +206,8 @@ class DiscoManagementService(
             pagosQR = pagosQR,
             pagosNequi = pagosNequi,
             pagosDatafono = pagosDatafono,
-            pagosVales = pagosVales
+            pagosVales = pagosVales,
+            negocioId = negocioId
         )
 
         req.meseros.forEach { mReq ->
@@ -153,7 +228,8 @@ class DiscoManagementService(
                 valesDetalle = if (mReq.valesDetalle.isNotEmpty()) objectMapper.writeValueAsString(mReq.valesDetalle) else null,
                 cortesiasDetalle = if (mReq.cortesiasDetalle.isNotEmpty()) objectMapper.writeValueAsString(mReq.cortesiasDetalle) else null,
                 gastosDetalle = if (mReq.gastosDetalle.isNotEmpty()) objectMapper.writeValueAsString(mReq.gastosDetalle) else null,
-                lineasDetalle = if (mReq.lineas.isNotEmpty()) objectMapper.writeValueAsString(mReq.lineas) else null
+                lineasDetalle = if (mReq.lineas.isNotEmpty()) objectMapper.writeValueAsString(mReq.lineas) else null,
+                negocioId = negocioId
             )
             meseroJornada.jornada = jornada
             jornada.meseros.add(meseroJornada)
@@ -169,14 +245,18 @@ class DiscoManagementService(
         jornadaRepo.delete(jornada)
     }
 
-    fun getAllInventarios(): List<DiscoInventarioResponse> =
-        inventarioRepo.findAllByOrderByCreadoEnDesc().map { it.toResponse() }
+    fun getAllInventarios(): List<DiscoInventarioResponse> {
+        val negocioId = tenantContext.getNegocioId()
+        return inventarioRepo.findByNegocioIdOrderByCreadoEnDesc(negocioId).map { it.toResponse() }
+    }
 
     @Transactional
     fun createInventario(req: DiscoInventarioRequest): DiscoInventarioResponse {
+        val negocioId = tenantContext.getNegocioId()
         val inventario = DiscoInventario(
             fecha = req.fecha,
-            totalGeneral = req.totalGeneral
+            totalGeneral = req.totalGeneral,
+            negocioId = negocioId
         )
 
         req.lineas.forEach { lReq ->
@@ -188,7 +268,8 @@ class DiscoManagementService(
                 entradas = lReq.entradas,
                 invFisico = lReq.invFisico,
                 saldo = lReq.saldo,
-                total = lReq.total
+                total = lReq.total,
+                negocioId = negocioId
             )
             linea.inventario = inventario
             inventario.lineas.add(linea)
@@ -204,14 +285,18 @@ class DiscoManagementService(
         inventarioRepo.delete(inventario)
     }
 
-    fun getAllMesas(): List<DiscoMesaResponse> =
-        mesaRepo.findAllByOrderByNumeroAsc().map { it.toResponse() }
+    fun getAllMesas(): List<DiscoMesaResponse> {
+        val negocioId = tenantContext.getNegocioId()
+        return mesaRepo.findByNegocioIdOrderByNumeroAsc(negocioId).map { it.toResponse() }
+    }
 
     @Transactional
     fun createMesa(req: DiscoMesaRequest): DiscoMesaResponse {
+        val negocioId = tenantContext.getNegocioId()
         val mesa = DiscoMesa(
             numero = req.numero,
-            nombre = req.nombre
+            nombre = req.nombre,
+            negocioId = negocioId
         )
         return mesaRepo.save(mesa).toResponse()
     }
@@ -298,6 +383,60 @@ class DiscoManagementService(
         total = total
     )
 
+    fun getAllComparativos(): List<DiscoComparativoResponse> {
+        val negocioId = tenantContext.getNegocioId()
+        return comparativoRepo.findByNegocioIdOrderByCreadoEnDesc(negocioId).map { it.toResponse() }
+    }
+
+    @Transactional
+    fun createComparativo(req: DiscoComparativoRequest): DiscoComparativoResponse {
+        val negocioId = tenantContext.getNegocioId()
+        val comparativo = DiscoComparativo(
+            fecha = req.fecha,
+            totalConteo = req.totalConteo,
+            totalTiquets = req.totalTiquets,
+            negocioId = negocioId
+        )
+
+        req.lineas.forEach { lReq ->
+            val linea = DiscoLineaComparativo(
+                productoId = lReq.productoId,
+                nombre = lReq.nombre,
+                conteo = lReq.conteo,
+                tiquets = lReq.tiquets,
+                diferencia = lReq.tiquets - lReq.conteo,
+                negocioId = negocioId
+            )
+            linea.comparativo = comparativo
+            comparativo.lineas.add(linea)
+        }
+
+        return comparativoRepo.save(comparativo).toResponse()
+    }
+
+    @Transactional
+    fun deleteComparativo(id: UUID) {
+        val comparativo = comparativoRepo.findById(id)
+            .orElseThrow { RuntimeException("Comparativo no encontrado con id: $id") }
+        comparativoRepo.delete(comparativo)
+    }
+
+    private fun DiscoComparativo.toResponse() = DiscoComparativoResponse(
+        id = id!!,
+        fecha = fecha,
+        lineas = lineas.map { it.toResponse() },
+        totalConteo = totalConteo,
+        totalTiquets = totalTiquets
+    )
+
+    private fun DiscoLineaComparativo.toResponse() = DiscoLineaComparativoResponse(
+        productoId = productoId,
+        nombre = nombre,
+        conteo = conteo,
+        tiquets = tiquets,
+        diferencia = diferencia
+    )
+
     private fun DiscoMesa.toResponse() = DiscoMesaResponse(
         id = id!!,
         numero = numero,
@@ -309,4 +448,82 @@ class DiscoManagementService(
         meseroColor = mesero?.color,
         meseroAvatar = mesero?.avatar
     )
+
+    fun getAllPromociones(): List<DiscoPromocionResponse> {
+        val negocioId = tenantContext.getNegocioId()
+        return promocionRepo.findByNegocioIdOrderByCreadoEnDesc(negocioId).map { it.toResponse() }
+    }
+
+    @Transactional
+    fun createPromocion(req: DiscoPromocionRequest): DiscoPromocionResponse {
+        val regaloProducto = productoRepo.findById(req.regaloProductoId)
+            .orElseThrow { RuntimeException("Producto regalo no encontrado: ${req.regaloProductoId}") }
+
+        req.compraProductoIds.forEach { id ->
+            productoRepo.findById(id)
+                .orElseThrow { RuntimeException("Producto de compra no encontrado: $id") }
+        }
+
+        val negocioId = tenantContext.getNegocioId()
+        val promo = DiscoPromocion(
+            nombre = req.nombre,
+            compraProductoIds = req.compraProductoIds.joinToString(","),
+            compraCantidad = req.compraCantidad,
+            regaloProducto = regaloProducto,
+            regaloCantidad = req.regaloCantidad,
+            negocioId = negocioId
+        )
+        return promocionRepo.save(promo).toResponse()
+    }
+
+    @Transactional
+    fun updatePromocion(id: UUID, req: DiscoPromocionUpdateRequest): DiscoPromocionResponse {
+        val promo = promocionRepo.findById(id)
+            .orElseThrow { RuntimeException("Promoción no encontrada con id: $id") }
+
+        val regaloProducto = if (req.regaloProductoId != null) {
+            productoRepo.findById(req.regaloProductoId)
+                .orElseThrow { RuntimeException("Producto regalo no encontrado: ${req.regaloProductoId}") }
+        } else promo.regaloProducto
+
+        val compraIds = if (req.compraProductoIds != null) {
+            req.compraProductoIds.joinToString(",")
+        } else promo.compraProductoIds
+
+        val updated = promo.copy(
+            nombre = req.nombre ?: promo.nombre,
+            compraProductoIds = compraIds,
+            compraCantidad = req.compraCantidad ?: promo.compraCantidad,
+            regaloProducto = regaloProducto,
+            regaloCantidad = req.regaloCantidad ?: promo.regaloCantidad,
+            activa = req.activa ?: promo.activa
+        )
+        return promocionRepo.save(updated).toResponse()
+    }
+
+    @Transactional
+    fun deletePromocion(id: UUID) {
+        val promo = promocionRepo.findById(id)
+            .orElseThrow { RuntimeException("Promoción no encontrada con id: $id") }
+        promocionRepo.delete(promo)
+    }
+
+    private fun DiscoPromocion.toResponse(): DiscoPromocionResponse {
+        val ids = compraProductoIds.split(",").map { UUID.fromString(it.trim()) }
+        val nombres = ids.mapNotNull { pid ->
+            productoRepo.findById(pid).orElse(null)?.nombre
+        }
+        return DiscoPromocionResponse(
+            id = id!!,
+            nombre = nombre,
+            compraProductoIds = ids,
+            compraProductoNombres = nombres,
+            compraCantidad = compraCantidad,
+            regaloProductoId = regaloProducto.id!!,
+            regaloProductoNombre = regaloProducto.nombre,
+            regaloProductoPrecio = regaloProducto.precio,
+            regaloCantidad = regaloCantidad,
+            activa = activa
+        )
+    }
 }

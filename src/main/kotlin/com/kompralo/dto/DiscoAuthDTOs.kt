@@ -14,5 +14,7 @@ data class DiscoAuthResponse(
     val nombre: String,
     val rol: DiscoRol,
     val meseroId: String? = null,
+    val negocioId: String? = null,
+    val negocioNombre: String? = null,
     val mensaje: String = "Bienvenido a Monastery Club"
 )

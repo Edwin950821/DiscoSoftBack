@@ -43,6 +43,13 @@ data class DiscoMeseroResponse(
     val username: String? = null
 )
 
+data class DiscoMeseroUpdateRequest(
+    val nombre: String? = null,
+    val color: String? = null,
+    val avatar: String? = null,
+    val activo: Boolean? = null
+)
+
 // ─── Jornada ───
 
 data class TransaccionDetalleDTO(
@@ -160,4 +167,37 @@ data class DiscoInventarioResponse(
     val fecha: String,
     val lineas: List<DiscoLineaInventarioResponse>,
     val totalGeneral: Int
+)
+
+// ─── Comparativo ───
+
+data class DiscoLineaComparativoRequest(
+    val productoId: UUID,
+    val nombre: String,
+    val conteo: Int = 0,
+    val tiquets: Int = 0,
+    val diferencia: Int = 0
+)
+
+data class DiscoLineaComparativoResponse(
+    val productoId: UUID,
+    val nombre: String,
+    val conteo: Int,
+    val tiquets: Int,
+    val diferencia: Int
+)
+
+data class DiscoComparativoRequest(
+    val fecha: String,
+    val lineas: List<DiscoLineaComparativoRequest>,
+    val totalConteo: Int,
+    val totalTiquets: Int
+)
+
+data class DiscoComparativoResponse(
+    val id: UUID,
+    val fecha: String,
+    val lineas: List<DiscoLineaComparativoResponse>,
+    val totalConteo: Int,
+    val totalTiquets: Int
 )

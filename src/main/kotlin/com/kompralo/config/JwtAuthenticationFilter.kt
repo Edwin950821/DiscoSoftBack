@@ -35,7 +35,7 @@ class JwtAuthenticationFilter(
             "/api/public/",
             "/api/sellers",
             "/api/webhooks/",
-            "/api/disco/"
+            "/api/disco/auth/"
         )
 
         val requestPath = request.servletPath

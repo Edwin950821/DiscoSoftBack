@@ -5,31 +5,31 @@ import java.time.LocalDateTime
 import java.util.UUID
 
 @Entity
-@Table(name = "disco_mesas", uniqueConstraints = [UniqueConstraint(name = "uq_mesa_numero_negocio", columnNames = ["numero", "negocio_id"])])
-data class DiscoMesa(
+@Table(name = "disco_promociones")
+data class DiscoPromocion(
     @Id
     @GeneratedValue(strategy = GenerationType.AUTO)
     @Column(columnDefinition = "uuid", updatable = false)
     val id: UUID? = null,
 
     @Column(nullable = false)
-    val numero: Int,
-
-    @Column(nullable = false)
     val nombre: String,
 
-    @Column(nullable = false)
-    var estado: String = "LIBRE",
+    @Column(name = "compra_producto_ids", nullable = false)
+    val compraProductoIds: String,
 
-    @Column(name = "nombre_cliente")
-    var nombreCliente: String? = null,
+    @Column(name = "compra_cantidad", nullable = false)
+    val compraCantidad: Int,
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "mesero_id")
-    var mesero: DiscoMesero? = null,
+    @JoinColumn(name = "regalo_producto_id", nullable = false)
+    val regaloProducto: DiscoProducto,
 
-    @Column(name = "jornada_id", columnDefinition = "uuid")
-    var jornadaId: UUID? = null,
+    @Column(name = "regalo_cantidad", nullable = false)
+    val regaloCantidad: Int = 1,
+
+    @Column(nullable = false)
+    var activa: Boolean = false,
 
     @Column(name = "creado_en", nullable = false, updatable = false)
     val creadoEn: LocalDateTime = LocalDateTime.now(),

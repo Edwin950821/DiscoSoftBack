@@ -10,10 +10,6 @@ import java.util.UUID
 
 @RestController
 @RequestMapping("/api/disco/management")
-@CrossOrigin(
-    origins = ["http://localhost:5173", "http://localhost:3000"],
-    allowCredentials = "true"
-)
 class DiscoManagementController(
     private val discoManagementService: DiscoManagementService
 ) {
@@ -94,6 +90,20 @@ class DiscoManagementController(
             log.error("Error al crear mesero: ${e.message}", e)
             ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(mapOf("message" to "Error al crear mesero"))
+        }
+    }
+
+    @PatchMapping("/meseros/{id}")
+    fun updateMesero(@PathVariable id: UUID, @RequestBody req: DiscoMeseroUpdateRequest): ResponseEntity<*> {
+        return try {
+            val mesero = discoManagementService.updateMesero(id, req)
+            ResponseEntity.ok(mesero)
+        } catch (e: IllegalArgumentException) {
+            ResponseEntity.badRequest().body(mapOf("message" to (e.message ?: "Mesero no encontrado")))
+        } catch (e: Exception) {
+            log.error("Error al actualizar mesero $id: ${e.message}", e)
+            ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(mapOf("message" to "Error al actualizar mesero"))
         }
     }
 
@@ -210,6 +220,91 @@ class DiscoManagementController(
             ResponseEntity.noContent().build()
         } catch (e: Exception) {
             log.error("Error al eliminar mesa $id: ${e.message}", e)
+            ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build()
+        }
+    }
+
+    @GetMapping("/comparativos")
+    fun getAllComparativos(): ResponseEntity<*> {
+        return try {
+            ResponseEntity.ok(discoManagementService.getAllComparativos())
+        } catch (e: Exception) {
+            log.error("Error al obtener comparativos: ${e.message}", e)
+            ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(mapOf("message" to "Error al obtener comparativos"))
+        }
+    }
+
+    @PostMapping("/comparativos")
+    fun createComparativo(@RequestBody req: DiscoComparativoRequest): ResponseEntity<*> {
+        return try {
+            val comparativo = discoManagementService.createComparativo(req)
+            ResponseEntity.status(HttpStatus.CREATED).body(comparativo)
+        } catch (e: Exception) {
+            log.error("Error al crear comparativo: ${e.message}", e)
+            ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(mapOf("message" to "Error al crear comparativo"))
+        }
+    }
+
+    @DeleteMapping("/comparativos/{id}")
+    fun deleteComparativo(@PathVariable id: UUID): ResponseEntity<Void> {
+        return try {
+            discoManagementService.deleteComparativo(id)
+            ResponseEntity.noContent().build()
+        } catch (e: Exception) {
+            log.error("Error al eliminar comparativo $id: ${e.message}", e)
+            ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build()
+        }
+    }
+
+    @GetMapping("/promociones")
+    fun getAllPromociones(): ResponseEntity<*> {
+        return try {
+            ResponseEntity.ok(discoManagementService.getAllPromociones())
+        } catch (e: Exception) {
+            log.error("Error al obtener promociones: ${e.message}", e)
+            ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(mapOf("message" to "Error al obtener promociones"))
+        }
+    }
+
+    @PostMapping("/promociones")
+    fun createPromocion(@RequestBody req: DiscoPromocionRequest): ResponseEntity<*> {
+        return try {
+            val promo = discoManagementService.createPromocion(req)
+            ResponseEntity.status(HttpStatus.CREATED).body(promo)
+        } catch (e: IllegalArgumentException) {
+            ResponseEntity.badRequest().body(mapOf("message" to (e.message ?: "Datos inválidos")))
+        } catch (e: Exception) {
+            log.error("Error al crear promoción: ${e.message}", e)
+            ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(mapOf("message" to "Error al crear promoción"))
+        }
+    }
+
+    @PatchMapping("/promociones/{id}")
+    fun updatePromocion(
+        @PathVariable id: UUID,
+        @RequestBody req: DiscoPromocionUpdateRequest
+    ): ResponseEntity<*> {
+        return try {
+            val promo = discoManagementService.updatePromocion(id, req)
+            ResponseEntity.ok(promo)
+        } catch (e: Exception) {
+            log.error("Error al actualizar promoción $id: ${e.message}", e)
+            ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(mapOf("message" to "Error al actualizar promoción"))
+        }
+    }
+
+    @DeleteMapping("/promociones/{id}")
+    fun deletePromocion(@PathVariable id: UUID): ResponseEntity<Void> {
+        return try {
+            discoManagementService.deletePromocion(id)
+            ResponseEntity.noContent().build()
+        } catch (e: Exception) {
+            log.error("Error al eliminar promoción $id: ${e.message}", e)
             ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build()
         }
     }
