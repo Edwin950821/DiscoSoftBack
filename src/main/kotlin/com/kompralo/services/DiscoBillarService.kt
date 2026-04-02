@@ -120,8 +120,9 @@ class DiscoBillarService(
 
         val ahora = LocalDateTime.now()
         val segundosJugados = ChronoUnit.SECONDS.between(partida.horaInicio, ahora)
-        val horasCobradas = if (segundosJugados <= 0) 1 else ceil(segundosJugados.toDouble() / 3600.0).toInt()
-        val total = horasCobradas * partida.precioPorHora
+        val minutosCobrados = if (segundosJugados <= 0) 1 else ceil(segundosJugados.toDouble() / 60.0).toInt()
+        val total = Math.round(minutosCobrados * partida.precioPorHora / 60.0).toInt()
+        val horasCobradas = minutosCobrados
 
         partida.horaFin = ahora
         partida.horasCobradas = horasCobradas
