@@ -24,9 +24,73 @@ class DataCleanupService(
     @EventListener(ApplicationReadyEvent::class)
     fun limpiarAlIniciar() {
         try {
+            migrarNegocioId()
             limpiarDatosViejos()
         } catch (e: Exception) {
-            log.error("Error durante limpieza automatica de datos: ${e.message}", e)
+            log.error("Error durante tareas automaticas al iniciar: ${e.message}", e)
+        }
+    }
+
+    /**
+     * Asigna negocio_id a filas existentes que lo tengan NULL.
+     * Usa el primer negocio encontrado. Excluye tablas de billar.
+     */
+    private fun migrarNegocioId() {
+        val tablas = listOf(
+            "disco_mesas",
+            "disco_meseros",
+            "disco_productos",
+            "disco_pedidos",
+            "disco_linea_pedido",
+            "disco_cuenta_mesa",
+            "disco_promociones",
+            "disco_inventarios",
+            "disco_linea_inventario",
+            "disco_jornadas",
+            "disco_mesero_jornada",
+            "disco_jornada_diaria",
+            "disco_comparativos",
+            "disco_linea_comparativo"
+        )
+
+        try {
+            TransactionTemplate(txManager).execute {
+                @Suppress("UNCHECKED_CAST")
+                val resultado = entityManager.createNativeQuery(
+                    "SELECT negocio_id FROM auth_users WHERE negocio_id IS NOT NULL LIMIT 1"
+                ).resultList as List<Any>
+
+                if (resultado.isEmpty()) {
+                    log.info("=== MIGRACION negocio_id: no hay usuarios con negocio, saltando ===")
+                    return@execute
+                }
+
+                val negocioId = resultado[0]
+                var totalActualizado = 0
+
+                for (tabla in tablas) {
+                    try {
+                        val updated = entityManager.createNativeQuery(
+                            "UPDATE $tabla SET negocio_id = :negocioId WHERE negocio_id IS NULL"
+                        ).setParameter("negocioId", negocioId).executeUpdate()
+
+                        if (updated > 0) {
+                            log.info("  -> $tabla: $updated filas actualizadas con negocio_id")
+                            totalActualizado += updated
+                        }
+                    } catch (e: Exception) {
+                        log.debug("Tabla $tabla no encontrada o sin columna negocio_id: ${e.message}")
+                    }
+                }
+
+                if (totalActualizado > 0) {
+                    log.info("=== MIGRACION negocio_id COMPLETADA: $totalActualizado filas actualizadas ===")
+                } else {
+                    log.info("=== MIGRACION negocio_id: no habia filas sin negocio_id ===")
+                }
+            }
+        } catch (e: Exception) {
+            log.error("Error durante migracion de negocio_id: ${e.message}", e)
         }
     }
 
