@@ -5,7 +5,7 @@ import java.time.LocalDateTime
 import java.util.UUID
 
 @Entity
-@Table(name = "disco_mesas_billar", uniqueConstraints = [UniqueConstraint(name = "uq_mesa_billar_numero_negocio", columnNames = ["numero", "negocio_id"])])
+@Table(name = "disco_mesas_billar")
 data class DiscoMesaBillar(
     @Id
     @GeneratedValue(strategy = GenerationType.AUTO)
@@ -30,6 +30,6 @@ data class DiscoMesaBillar(
     @Column(name = "creado_en", nullable = false, updatable = false)
     val creadoEn: LocalDateTime = LocalDateTime.now(),
 
-    @Column(name = "negocio_id", nullable = false, columnDefinition = "uuid")
+    @Column(name = "negocio_id", columnDefinition = "uuid")
     val negocioId: UUID = UUID(0, 0)
 )
