@@ -44,7 +44,9 @@ class DiscoBillarService(
     @Transactional
     fun createMesaBillar(req: DiscoMesaBillarRequest): DiscoMesaBillarResponse {
         val negocioId = tenantContext.getNegocioId()
-        val nextNumero = mesaBillarRepo.findMaxNumeroByNegocioId(negocioId) + 1
+        val maxByNegocio = mesaBillarRepo.findMaxNumeroByNegocioId(negocioId)
+        val maxGlobal = mesaBillarRepo.findMaxNumeroGlobal()
+        val nextNumero = maxOf(maxByNegocio, maxGlobal) + 1
 
         val mesa = DiscoMesaBillar(
             numero = nextNumero,

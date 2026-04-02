@@ -49,19 +49,25 @@ class DatabaseMigration(
     @EventListener(ApplicationReadyEvent::class)
     fun migrateBillarNegocioId() {
         try {
-            // Check if negocio_id column exists in disco_mesas_billar
+            val tableExists = jdbcTemplate.queryForList(
+                "SELECT table_name FROM information_schema.tables WHERE table_name = 'disco_mesas_billar'"
+            )
+            if (tableExists.isEmpty()) return // tabla no existe aun, ddl-auto la creara bien
+
+            // Siempre intentar eliminar el constraint viejo UNIQUE(numero) que bloquea inserts
+            jdbcTemplate.execute("ALTER TABLE disco_mesas_billar DROP CONSTRAINT IF EXISTS disco_mesas_billar_numero_key")
+
+            // Si la columna negocio_id no existe, agregarla manualmente
             val cols = jdbcTemplate.queryForList(
                 "SELECT column_name FROM information_schema.columns WHERE table_name = 'disco_mesas_billar' AND column_name = 'negocio_id'"
             )
-            if (cols.isNotEmpty()) return // already migrated
+            if (cols.isEmpty()) {
+                log.warn("Adding negocio_id to billar tables...")
+                jdbcTemplate.execute("ALTER TABLE disco_mesas_billar ADD COLUMN negocio_id UUID")
+                jdbcTemplate.execute("ALTER TABLE disco_partidas_billar ADD COLUMN negocio_id UUID")
+            }
 
-            log.warn("Adding negocio_id to billar tables...")
-
-            // Add nullable negocio_id columns
-            jdbcTemplate.execute("ALTER TABLE disco_mesas_billar ADD COLUMN negocio_id UUID")
-            jdbcTemplate.execute("ALTER TABLE disco_partidas_billar ADD COLUMN negocio_id UUID")
-
-            // Fill with first user's negocio_id
+            // Asignar negocio_id a filas huerfanas
             jdbcTemplate.execute("""
                 UPDATE disco_mesas_billar SET negocio_id = COALESCE(
                     (SELECT negocio_id FROM auth_users WHERE negocio_id IS NOT NULL LIMIT 1),
@@ -75,14 +81,11 @@ class DatabaseMigration(
                 ) WHERE negocio_id IS NULL
             """.trimIndent())
 
-            // Drop old unique constraint on numero only
-            jdbcTemplate.execute("ALTER TABLE disco_mesas_billar DROP CONSTRAINT IF EXISTS disco_mesas_billar_numero_key")
-
-            // Add indexes
+            // Indexes
             jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_mesas_billar_negocio ON disco_mesas_billar(negocio_id)")
             jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_partidas_billar_negocio ON disco_partidas_billar(negocio_id)")
 
-            log.info("Billar negocio_id migration complete")
+            log.info("Billar migration check complete")
         } catch (e: Exception) {
             log.error("Billar migration skipped: ${e.message}")
         }
