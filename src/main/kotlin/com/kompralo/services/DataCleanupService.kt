@@ -54,40 +54,44 @@ class DataCleanupService(
         )
 
         try {
-            TransactionTemplate(txManager).execute {
+            // Obtener negocio_id en su propia transaccion
+            val negocioId = TransactionTemplate(txManager).execute {
                 @Suppress("UNCHECKED_CAST")
                 val resultado = entityManager.createNativeQuery(
                     "SELECT negocio_id FROM auth_users WHERE negocio_id IS NOT NULL LIMIT 1"
                 ).resultList as List<Any>
+                if (resultado.isEmpty()) null else resultado[0]
+            }
 
-                if (resultado.isEmpty()) {
-                    log.info("=== MIGRACION negocio_id: no hay usuarios con negocio, saltando ===")
-                    return@execute
-                }
+            if (negocioId == null) {
+                log.info("=== MIGRACION negocio_id: no hay usuarios con negocio, saltando ===")
+                return
+            }
 
-                val negocioId = resultado[0]
-                var totalActualizado = 0
+            var totalActualizado = 0
 
-                for (tabla in tablas) {
-                    try {
-                        val updated = entityManager.createNativeQuery(
+            // Cada tabla en su propia transaccion para que un fallo no arrastre a las demas
+            for (tabla in tablas) {
+                try {
+                    val updated = TransactionTemplate(txManager).execute {
+                        entityManager.createNativeQuery(
                             "UPDATE $tabla SET negocio_id = :negocioId WHERE negocio_id IS NULL"
                         ).setParameter("negocioId", negocioId).executeUpdate()
+                    } ?: 0
 
-                        if (updated > 0) {
-                            log.info("  -> $tabla: $updated filas actualizadas con negocio_id")
-                            totalActualizado += updated
-                        }
-                    } catch (e: Exception) {
-                        log.debug("Tabla $tabla no encontrada o sin columna negocio_id: ${e.message}")
+                    if (updated > 0) {
+                        log.info("  -> $tabla: $updated filas actualizadas con negocio_id")
+                        totalActualizado += updated
                     }
+                } catch (e: Exception) {
+                    log.debug("Tabla $tabla no encontrada o sin columna negocio_id: ${e.message}")
                 }
+            }
 
-                if (totalActualizado > 0) {
-                    log.info("=== MIGRACION negocio_id COMPLETADA: $totalActualizado filas actualizadas ===")
-                } else {
-                    log.info("=== MIGRACION negocio_id: no habia filas sin negocio_id ===")
-                }
+            if (totalActualizado > 0) {
+                log.info("=== MIGRACION negocio_id COMPLETADA: $totalActualizado filas actualizadas ===")
+            } else {
+                log.info("=== MIGRACION negocio_id: no habia filas sin negocio_id ===")
             }
         } catch (e: Exception) {
             log.error("Error durante migracion de negocio_id: ${e.message}", e)
