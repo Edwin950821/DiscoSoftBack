@@ -166,6 +166,38 @@ class DiscoBillarService(
         return response
     }
 
+    @Transactional
+    fun editarPartida(partidaId: UUID, req: DiscoEditarPartidaRequest): DiscoPartidaBillarResponse {
+        val negocioId = tenantContext.getNegocioId()
+        val partida = partidaRepo.findById(partidaId)
+            .orElseThrow { NoSuchElementException("Partida no encontrada") }
+
+        if (partida.negocioId != negocioId) throw IllegalStateException("No autorizado")
+        if (partida.estado != "FINALIZADA") throw IllegalStateException("Solo se pueden editar partidas finalizadas")
+
+        req.nombreCliente?.let { partida.nombreCliente = it }
+        req.horasCobradas?.let { partida.horasCobradas = it }
+        req.total?.let { partida.total = it }
+
+        val saved = partidaRepo.save(partida)
+        val response = saved.toResponse()
+        socketIO.sendToAdmin("billar_partida_editada", response, tenantId)
+        return response
+    }
+
+    @Transactional
+    fun eliminarPartida(partidaId: UUID) {
+        val negocioId = tenantContext.getNegocioId()
+        val partida = partidaRepo.findById(partidaId)
+            .orElseThrow { NoSuchElementException("Partida no encontrada") }
+
+        if (partida.negocioId != negocioId) throw IllegalStateException("No autorizado")
+        if (partida.estado == "EN_JUEGO") throw IllegalStateException("No se puede eliminar una partida en juego")
+
+        partidaRepo.delete(partida)
+        socketIO.sendToAdmin("billar_partida_eliminada", mapOf("id" to partidaId), tenantId)
+    }
+
     @Transactional(readOnly = true)
     fun getPartidasHoy(): List<DiscoPartidaBillarResponse> {
         val negocioId = tenantContext.getNegocioId()

@@ -32,6 +32,12 @@ data class DiscoTrasladarPartidaRequest(
     val mesaDestinoId: UUID
 )
 
+data class DiscoEditarPartidaRequest(
+    val nombreCliente: String? = null,
+    val horasCobradas: Int? = null,
+    val total: Int? = null
+)
+
 data class DiscoPartidaBillarResponse(
     val id: UUID,
     val mesaBillarId: UUID,

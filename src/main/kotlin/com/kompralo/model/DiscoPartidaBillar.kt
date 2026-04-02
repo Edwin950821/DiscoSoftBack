@@ -17,7 +17,7 @@ data class DiscoPartidaBillar(
     var mesaBillar: DiscoMesaBillar,
 
     @Column(name = "nombre_cliente")
-    val nombreCliente: String = "Cliente",
+    var nombreCliente: String = "Cliente",
 
     @Column(name = "hora_inicio", nullable = false)
     val horaInicio: LocalDateTime = LocalDateTime.now(),
