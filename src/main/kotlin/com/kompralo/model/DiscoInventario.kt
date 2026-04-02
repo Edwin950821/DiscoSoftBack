@@ -21,7 +21,7 @@ data class DiscoInventario(
     @Column(name = "creado_en", nullable = false, updatable = false)
     val creadoEn: LocalDateTime = LocalDateTime.now(),
 
-    @Column(name = "negocio_id", nullable = false, columnDefinition = "uuid")
+    @Column(name = "negocio_id", nullable = true, columnDefinition = "uuid")
     val negocioId: UUID = UUID(0, 0),
 
     @OneToMany(mappedBy = "inventario", cascade = [CascadeType.ALL], orphanRemoval = true)

@@ -54,7 +54,7 @@ data class DiscoPedido(
     @Column(name = "cancelado_en")
     var canceladoEn: LocalDateTime? = null,
 
-    @Column(name = "negocio_id", nullable = false, columnDefinition = "uuid")
+    @Column(name = "negocio_id", nullable = true, columnDefinition = "uuid")
     val negocioId: UUID = UUID(0, 0),
 
     @OneToMany(mappedBy = "pedido", cascade = [CascadeType.ALL], orphanRemoval = true)

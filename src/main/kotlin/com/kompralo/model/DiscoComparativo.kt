@@ -24,7 +24,7 @@ data class DiscoComparativo(
     @Column(name = "creado_en", nullable = false, updatable = false)
     val creadoEn: LocalDateTime = LocalDateTime.now(),
 
-    @Column(name = "negocio_id", nullable = false, columnDefinition = "uuid")
+    @Column(name = "negocio_id", nullable = true, columnDefinition = "uuid")
     val negocioId: UUID = UUID(0, 0),
 
     @OneToMany(mappedBy = "comparativo", cascade = [CascadeType.ALL], orphanRemoval = true)
@@ -58,6 +58,6 @@ data class DiscoLineaComparativo(
     @JoinColumn(name = "comparativo_id", nullable = false)
     var comparativo: DiscoComparativo? = null,
 
-    @Column(name = "negocio_id", nullable = false, columnDefinition = "uuid")
+    @Column(name = "negocio_id", nullable = true, columnDefinition = "uuid")
     val negocioId: UUID = UUID(0, 0)
 )

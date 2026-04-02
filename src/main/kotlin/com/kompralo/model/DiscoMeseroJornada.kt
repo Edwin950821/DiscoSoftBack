@@ -69,6 +69,6 @@ data class DiscoMeseroJornada(
     @Column(name = "lineas_detalle", columnDefinition = "TEXT")
     var lineasDetalle: String? = null,
 
-    @Column(name = "negocio_id", nullable = false, columnDefinition = "uuid")
+    @Column(name = "negocio_id", nullable = true, columnDefinition = "uuid")
     val negocioId: UUID = UUID(0, 0)
 )

@@ -33,6 +33,6 @@ data class DiscoLineaPedido(
     @Column(nullable = false)
     val total: Int = 0,
 
-    @Column(name = "negocio_id", nullable = false, columnDefinition = "uuid")
+    @Column(name = "negocio_id", nullable = true, columnDefinition = "uuid")
     val negocioId: UUID = UUID(0, 0)
 )
