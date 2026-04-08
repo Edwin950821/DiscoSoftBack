@@ -158,6 +158,22 @@ class DiscoBillarController(
         }
     }
 
+    @GetMapping("/partidas")
+    fun getPartidasPorFecha(@RequestParam fecha: String): ResponseEntity<*> {
+        // Validar formato YYYY-MM-DD para evitar queries innecesarias o errores 500
+        if (!fecha.matches(Regex("^\\d{4}-\\d{2}-\\d{2}$"))) {
+            return ResponseEntity.badRequest()
+                .body(mapOf("message" to "Formato de fecha invalido. Use YYYY-MM-DD"))
+        }
+        return try {
+            ResponseEntity.ok(billarService.getPartidasPorFecha(fecha))
+        } catch (e: Exception) {
+            log.error("Error al obtener partidas de $fecha: ${e.message}", e)
+            ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(mapOf("message" to "Error al obtener partidas"))
+        }
+    }
+
     @GetMapping("/total-hoy")
     fun getTotalHoy(): ResponseEntity<*> {
         return try {

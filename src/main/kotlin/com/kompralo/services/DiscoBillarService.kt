@@ -17,6 +17,7 @@ import kotlin.math.ceil
 class DiscoBillarService(
     private val mesaBillarRepo: DiscoMesaBillarRepository,
     private val partidaRepo: DiscoPartidaBillarRepository,
+    private val jornadaDiariaRepo: DiscoJornadaDiariaRepository,
     private val socketIO: SocketIOService,
     private val tenantContext: TenantContext
 ) {
@@ -181,7 +182,11 @@ class DiscoBillarService(
         req.horasCobradas?.let { partida.horasCobradas = it }
         req.total?.let { partida.total = it }
 
-        val saved = partidaRepo.save(partida)
+        val saved = partidaRepo.saveAndFlush(partida)
+
+        // Recalcular snapshot de la jornada cerrada (si existe) para que el total quede al día
+        recalcularJornadaDiaria(negocioId, saved.jornadaFecha)
+
         val response = saved.toResponse()
         socketIO.sendToAdmin("billar_partida_editada", response, tenantId)
         return response
@@ -196,14 +201,47 @@ class DiscoBillarService(
         if (partida.negocioId != negocioId) throw IllegalStateException("No autorizado")
         if (partida.estado == "EN_JUEGO") throw IllegalStateException("No se puede eliminar una partida en juego")
 
+        val jornadaFecha = partida.jornadaFecha
         partidaRepo.delete(partida)
+        partidaRepo.flush() // forzar el delete en BD antes de recalcular
+
+        // Recalcular snapshot de la jornada cerrada (si existe) tras la eliminación
+        recalcularJornadaDiaria(negocioId, jornadaFecha)
+
         socketIO.sendToAdmin("billar_partida_eliminada", mapOf("id" to partidaId), tenantId)
+    }
+
+    /**
+     * Recalcula totalBillar, partidasBillar y totalGeneral de una DiscoJornadaDiaria
+     * cerrada en base a las partidas FINALIZADAS de esa fecha.
+     *
+     * Es helper interno: SIEMPRE se llama desde dentro de un método @Transactional
+     * (editarPartida / eliminarPartida) para participar de la misma transacción.
+     * Por eso es private y NO lleva @Transactional propio (Spring AOP no intercepta
+     * llamadas internas a métodos de la misma clase).
+     *
+     * Si no existe una jornada cerrada para esa fecha, no hace nada.
+     */
+    private fun recalcularJornadaDiaria(negocioId: UUID, fecha: String) {
+        val jornada = jornadaDiariaRepo.findByNegocioIdAndFecha(negocioId, fecha) ?: return
+        val finalizadas = partidaRepo.findByNegocioIdAndJornadaFechaAndEstado(negocioId, fecha, "FINALIZADA")
+        val totalBillar = finalizadas.sumOf { it.total ?: 0 }
+        jornada.totalBillar = totalBillar
+        jornada.partidasBillar = finalizadas.size
+        jornada.totalGeneral = jornada.totalVentas + totalBillar
+        jornadaDiariaRepo.save(jornada)
     }
 
     @Transactional(readOnly = true)
     fun getPartidasHoy(): List<DiscoPartidaBillarResponse> {
         val negocioId = tenantContext.getNegocioId()
         return partidaRepo.findByNegocioIdAndJornadaFechaOrderByCreadoEnDesc(negocioId, hoy).map { it.toResponse() }
+    }
+
+    @Transactional(readOnly = true)
+    fun getPartidasPorFecha(fecha: String): List<DiscoPartidaBillarResponse> {
+        val negocioId = tenantContext.getNegocioId()
+        return partidaRepo.findByNegocioIdAndJornadaFechaOrderByCreadoEnDesc(negocioId, fecha).map { it.toResponse() }
     }
 
     @Transactional(readOnly = true)

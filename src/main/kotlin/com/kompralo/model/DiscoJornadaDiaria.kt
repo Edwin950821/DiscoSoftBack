@@ -6,7 +6,7 @@ import java.util.UUID
 
 @Entity
 @Table(name = "disco_jornada_diaria")
-data class DiscoJornadaDiaria(
+class DiscoJornadaDiaria(
     @Id
     @GeneratedValue(strategy = GenerationType.AUTO)
     @Column(columnDefinition = "uuid", updatable = false)
@@ -18,11 +18,12 @@ data class DiscoJornadaDiaria(
     @Column(name = "total_ventas", nullable = false)
     val totalVentas: Int = 0,
 
+    // Mutables: el helper recalcularJornadaDiaria los actualiza al editar/eliminar partidas
     @Column(name = "total_billar", nullable = false)
-    val totalBillar: Int = 0,
+    var totalBillar: Int = 0,
 
     @Column(name = "total_general", nullable = false)
-    val totalGeneral: Int = 0,
+    var totalGeneral: Int = 0,
 
     @Column(name = "cuentas_cerradas", nullable = false)
     val cuentasCerradas: Int = 0,
@@ -34,7 +35,7 @@ data class DiscoJornadaDiaria(
     val mesasAtendidas: Int = 0,
 
     @Column(name = "partidas_billar", nullable = false)
-    val partidasBillar: Int = 0,
+    var partidasBillar: Int = 0,
 
     @Column(name = "cerrado_en", nullable = false, updatable = false)
     val cerradoEn: LocalDateTime = LocalDateTime.now(),
