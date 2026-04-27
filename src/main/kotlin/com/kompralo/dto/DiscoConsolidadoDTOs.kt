@@ -19,5 +19,8 @@ data class ConsolidadoResponse(
     val totalGastos: Long,
     val jornadasCount: Int,
     val negociosCount: Int,
-    val porNegocio: List<NegocioConsolidado>
+    val porNegocio: List<NegocioConsolidado>,
+    // Totales por medio de pago sumando TODOS los negocios
+    // Keys: "Efectivo", "QR", "Nequi", "Datafono", "Vales"
+    val pagosTotales: Map<String, Long> = emptyMap()
 )

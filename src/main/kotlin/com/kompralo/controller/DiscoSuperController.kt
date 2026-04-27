@@ -43,6 +43,14 @@ class DiscoSuperController(
                 )
             }.sortedByDescending { it.totalVendido }
 
+            val pagosTotales = mapOf(
+                "Efectivo" to jornadas.sumOf { it.pagosEfectivo.toLong() },
+                "QR" to jornadas.sumOf { it.pagosQR.toLong() },
+                "Nequi" to jornadas.sumOf { it.pagosNequi.toLong() },
+                "Datafono" to jornadas.sumOf { it.pagosDatafono.toLong() },
+                "Vales" to jornadas.sumOf { it.pagosVales.toLong() }
+            )
+
             val response = ConsolidadoResponse(
                 totalVendido = porNegocio.sumOf { it.totalVendido },
                 totalRecibido = porNegocio.sumOf { it.totalRecibido },
@@ -51,7 +59,8 @@ class DiscoSuperController(
                 totalGastos = jornadas.sumOf { it.gastos.toLong() },
                 jornadasCount = jornadas.size,
                 negociosCount = porNegocio.size,
-                porNegocio = porNegocio
+                porNegocio = porNegocio,
+                pagosTotales = pagosTotales
             )
 
             ResponseEntity.ok(response)
