@@ -115,6 +115,10 @@ class DiscoSuperController(
                 .take(5)
 
             // === Top 5 productos (de lineasDetalle JSON) ===
+            // Para consolidado, agrupamos por NOMBRE (no por productoId) porque cada
+            // negocio tiene su propia tabla de productos: "Aguila Negra" en Discoteca
+            // tiene UUID distinto al "Aguila Negra" en Billar — pero como producto del
+            // mundo real es el mismo y debe sumar en el ranking global.
             data class ProdAcc(var nombre: String, var cantidad: Int, var total: Long)
             val prodMap = mutableMapOf<String, ProdAcc>()
             jornadas.forEach { j ->
@@ -127,7 +131,7 @@ class DiscoSuperController(
                         return@meseroLoop
                     }
                     lineas.forEach lineaLoop@ { l ->
-                        val key = l.productoId.ifBlank { l.nombre }
+                        val key = l.nombre.trim()
                         if (key.isBlank()) return@lineaLoop
                         val acc = prodMap.getOrPut(key) { ProdAcc(l.nombre, 0, 0L) }
                         acc.cantidad += l.cantidad
@@ -136,7 +140,7 @@ class DiscoSuperController(
                 }
             }
             val topProductos = prodMap.entries
-                .map { (id, acc) -> TopProducto(id, acc.nombre, acc.cantidad, acc.total) }
+                .map { (nombre, acc) -> TopProducto(nombre, acc.nombre, acc.cantidad, acc.total) }
                 .sortedByDescending { it.total }
                 .take(5)
 
