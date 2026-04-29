@@ -10,7 +10,7 @@ import java.math.BigDecimal
  * Combina información de usuario + perfil de vendedor
  */
 data class SellerRegisterRequest(
-    // Datos de cuenta
+
     @field:NotBlank(message = "El email es requerido")
     val email: String,
 
@@ -21,7 +21,6 @@ data class SellerRegisterRequest(
     @field:NotBlank(message = "El nombre es requerido")
     val name: String,
 
-    // Datos del negocio
     @field:NotBlank(message = "El nombre del negocio es requerido")
     val businessName: String,
 
@@ -35,7 +34,6 @@ data class SellerRegisterRequest(
 
     val taxId: String? = null,
 
-    // Dirección
     val address: String? = null,
 
     val city: String? = null,

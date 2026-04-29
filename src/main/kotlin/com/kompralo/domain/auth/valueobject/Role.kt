@@ -1,9 +1,9 @@
 package com.kompralo.domain.auth.valueobject
 
 enum class Role {
-    USER,      // Comprador
-    BUSINESS,  // Vendedor
-    ADMIN;     // Administrador
+    USER,
+    BUSINESS,
+    ADMIN;
 
     companion object {
         fun fromString(role: String): Role {

@@ -24,8 +24,6 @@ class DiscoBillarService(
 
     private val tenantId: String get() = tenantContext.getNegocioId().toString()
 
-    // El "día" cambia a las 6AM Colombia, no a medianoche.
-    // Así una jornada nocturna (ej: 2PM a 3AM) queda en una sola fecha.
     private val hoy: String get() {
         val ahora = LocalDateTime.now(ZoneId.of("America/Bogota"))
         val fechaJornada = if (ahora.hour < 6) ahora.minusDays(1) else ahora
@@ -155,7 +153,6 @@ class DiscoBillarService(
         if (mesaDestino.estado == "EN_JUEGO") throw IllegalStateException("La mesa de destino ya tiene una partida activa")
         if (!mesaDestino.activo) throw IllegalStateException("La mesa de destino no esta activa")
 
-        // Mover partida a mesa destino
         partida.mesaBillar = mesaDestino
         mesaOrigen.estado = "LIBRE"
         mesaDestino.estado = "EN_JUEGO"
@@ -184,7 +181,7 @@ class DiscoBillarService(
 
         val saved = partidaRepo.saveAndFlush(partida)
 
-        // Recalcular snapshot de la jornada cerrada (si existe) para que el total quede al día
+
         recalcularJornadaDiaria(negocioId, saved.jornadaFecha)
 
         val response = saved.toResponse()
@@ -203,25 +200,15 @@ class DiscoBillarService(
 
         val jornadaFecha = partida.jornadaFecha
         partidaRepo.delete(partida)
-        partidaRepo.flush() // forzar el delete en BD antes de recalcular
+        partidaRepo.flush()
 
-        // Recalcular snapshot de la jornada cerrada (si existe) tras la eliminación
+
         recalcularJornadaDiaria(negocioId, jornadaFecha)
 
         socketIO.sendToAdmin("billar_partida_eliminada", mapOf("id" to partidaId), tenantId)
     }
 
-    /**
-     * Recalcula totalBillar, partidasBillar y totalGeneral de una DiscoJornadaDiaria
-     * cerrada en base a las partidas FINALIZADAS de esa fecha.
-     *
-     * Es helper interno: SIEMPRE se llama desde dentro de un método @Transactional
-     * (editarPartida / eliminarPartida) para participar de la misma transacción.
-     * Por eso es private y NO lleva @Transactional propio (Spring AOP no intercepta
-     * llamadas internas a métodos de la misma clase).
-     *
-     * Si no existe una jornada cerrada para esa fecha, no hace nada.
-     */
+
     private fun recalcularJornadaDiaria(negocioId: UUID, fecha: String) {
         val jornada = jornadaDiariaRepo.findByNegocioIdAndFecha(negocioId, fecha) ?: return
         val finalizadas = partidaRepo.findByNegocioIdAndJornadaFechaAndEstado(negocioId, fecha, "FINALIZADA")

@@ -56,7 +56,6 @@ class SocketIOService(
                     client.joinRoom("user_$it")
                 }
 
-                // Resolve negocioId from user for tenant-scoped rooms
                 val negocioId = try {
                     userRepository.findByEmail(email)
                         .or { userRepository.findByUsername(email) }

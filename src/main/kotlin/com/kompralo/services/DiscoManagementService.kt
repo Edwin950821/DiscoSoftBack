@@ -36,12 +36,7 @@ class DiscoManagementService(
     @PersistenceContext
     private lateinit var entityManager: EntityManager
 
-    /**
-     * Valida que el recurso pertenezca al negocio del tenant actual.
-     * Defensa en profundidad: previene que un admin de un negocio modifique/borre
-     * recursos de otro incluso si conoce su UUID.
-     * Si `tenantId` se pasa explícito, se usa ese; sino se resuelve del contexto.
-     */
+
     private fun ensureMismoTenant(recursoNegocioId: UUID?, recursoTipo: String, tenantId: UUID? = null) {
         val tid = tenantId ?: tenantContext.getNegocioId()
         if (recursoNegocioId != tid) {
@@ -148,7 +143,6 @@ class DiscoManagementService(
     fun deleteMesero(id: UUID) {
         val negocioId = tenantContext.getNegocioId()
 
-        // Obtener username via SQL nativo — NO cargamos entidad JPA
         @Suppress("UNCHECKED_CAST")
         val result = entityManager.createNativeQuery(
             "SELECT username FROM disco_meseros WHERE id = ?1 AND negocio_id = ?2"
@@ -159,7 +153,6 @@ class DiscoManagementService(
         }
         val username = result[0]
 
-        // SQL nativo en orden estricto — sin interferencia de Hibernate
         entityManager.createNativeQuery(
             "DELETE FROM disco_linea_pedido WHERE pedido_id IN (SELECT id FROM disco_pedidos WHERE mesero_id = ?1 AND negocio_id = ?2)"
         ).setParameter(1, id).setParameter(2, negocioId).executeUpdate()
@@ -180,7 +173,6 @@ class DiscoManagementService(
             "DELETE FROM disco_meseros WHERE id = ?1 AND negocio_id = ?2"
         ).setParameter(1, id).setParameter(2, negocioId).executeUpdate()
 
-        // Eliminar usuario auth si existe
         if (!username.isNullOrBlank()) {
             entityManager.createNativeQuery(
                 "DELETE FROM auth_users WHERE username = ?1"

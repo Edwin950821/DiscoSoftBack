@@ -62,7 +62,6 @@ class DiscoSuperController(
                 "Vales" to jornadas.sumOf { it.pagosVales.toLong() }
             )
 
-            // === Comparativo mes actual vs mes anterior (basado en fecha YYYY-MM-DD) ===
             val hoy = LocalDate.now()
             val mesActual = hoy.month
             val anioActual = hoy.year
@@ -81,7 +80,6 @@ class DiscoSuperController(
                 }
             }
 
-            // === Tendencia 30 dias (suma global por dia, ordenado asc) ===
             val hace30 = hoy.minusDays(29)
             val tendenciaMap = sortedMapOf<LocalDate, Long>()
             var cursor = hace30
@@ -97,7 +95,6 @@ class DiscoSuperController(
             }
             val tendencia30Dias = tendenciaMap.map { (d, total) -> TendenciaDia(d.format(ISO_DATE), total) }
 
-            // === Top 5 meseros (acumulado entre todos los negocios) ===
             data class MeseroAcc(var nombre: String, var color: String, var total: Long, var jornadas: MutableSet<java.util.UUID>)
             val meseroMap = mutableMapOf<java.util.UUID, MeseroAcc>()
             jornadas.forEach { j ->
@@ -114,11 +111,6 @@ class DiscoSuperController(
                 .sortedByDescending { it.totalVendido }
                 .take(5)
 
-            // === Top 5 productos (de lineasDetalle JSON) ===
-            // Para consolidado, agrupamos por NOMBRE (no por productoId) porque cada
-            // negocio tiene su propia tabla de productos: "Aguila Negra" en Discoteca
-            // tiene UUID distinto al "Aguila Negra" en Billar — pero como producto del
-            // mundo real es el mismo y debe sumar en el ranking global.
             data class ProdAcc(var nombre: String, var cantidad: Int, var total: Long)
             val prodMap = mutableMapOf<String, ProdAcc>()
             jornadas.forEach { j ->

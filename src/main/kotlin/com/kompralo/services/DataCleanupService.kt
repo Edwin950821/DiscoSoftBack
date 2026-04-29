@@ -54,7 +54,7 @@ class DataCleanupService(
         )
 
         try {
-            // Obtener negocio_id en su propia transaccion
+
             val negocioId = TransactionTemplate(txManager).execute {
                 @Suppress("UNCHECKED_CAST")
                 val resultado = entityManager.createNativeQuery(
@@ -70,7 +70,6 @@ class DataCleanupService(
 
             var totalActualizado = 0
 
-            // Cada tabla en su propia transaccion para que un fallo no arrastre a las demas
             for (tabla in tablas) {
                 try {
                     val updated = TransactionTemplate(txManager).execute {
@@ -105,23 +104,18 @@ class DataCleanupService(
         log.info("=== LIMPIEZA AUTOMATICA: eliminando datos anteriores a $fechaLimiteStr ===")
 
         val queries = listOf(
-            // DISCO: Pedidos y Cuentas (orden correcto por FK)
+
             "DELETE FROM disco_linea_pedido WHERE pedido_id IN (SELECT id FROM disco_pedidos WHERE creado_en < :fecha)",
             "DELETE FROM disco_pedidos WHERE creado_en < :fecha",
             "DELETE FROM disco_cuenta_mesa WHERE creado_en < :fecha",
-            // DISCO: Billar
             "DELETE FROM disco_partidas_billar WHERE creado_en < :fecha",
-            // DISCO: Jornadas
             "DELETE FROM disco_mesero_jornada WHERE jornada_id IN (SELECT id FROM disco_jornadas WHERE creado_en < :fecha)",
             "DELETE FROM disco_jornadas WHERE creado_en < :fecha",
             "DELETE FROM disco_jornada_diaria WHERE cerrado_en < :fecha",
-            // DISCO: Inventarios
             "DELETE FROM disco_linea_inventario WHERE inventario_id IN (SELECT id FROM disco_inventarios WHERE creado_en < :fecha)",
             "DELETE FROM disco_inventarios WHERE creado_en < :fecha",
-            // DISCO: Comparativos
             "DELETE FROM disco_linea_comparativo WHERE comparativo_id IN (SELECT id FROM disco_comparativos WHERE creado_en < :fecha)",
             "DELETE FROM disco_comparativos WHERE creado_en < :fecha",
-            // GENERAL: Logs y notificaciones
             "DELETE FROM analytics_events WHERE created_at < :fecha",
             "DELETE FROM email_delivery_log WHERE sent_at < :fecha",
             "DELETE FROM notifications WHERE created_at < :fecha",

@@ -5,8 +5,6 @@ import com.kompralo.model.PaymentMethod
 import java.math.BigDecimal
 import java.time.LocalDateTime
 
-// ==================== ORDER ITEM DTOs ====================
-
 data class OrderItemRequest(
     val productId: Long,
     val quantity: Int,
@@ -31,8 +29,6 @@ data class OrderItemResponse(
     val discount: BigDecimal,
     val subtotal: BigDecimal
 )
-
-// ==================== ORDER DTOs ====================
 
 data class CreateOrderRequest(
     val buyerEmail: String,

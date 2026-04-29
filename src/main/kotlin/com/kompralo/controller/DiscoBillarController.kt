@@ -160,7 +160,7 @@ class DiscoBillarController(
 
     @GetMapping("/partidas")
     fun getPartidasPorFecha(@RequestParam fecha: String): ResponseEntity<*> {
-        // Validar formato YYYY-MM-DD para evitar queries innecesarias o errores 500
+
         if (!fecha.matches(Regex("^\\d{4}-\\d{2}-\\d{2}$"))) {
             return ResponseEntity.badRequest()
                 .body(mapOf("message" to "Formato de fecha invalido. Use YYYY-MM-DD"))

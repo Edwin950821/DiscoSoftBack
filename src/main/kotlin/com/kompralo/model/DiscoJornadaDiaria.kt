@@ -18,7 +18,6 @@ class DiscoJornadaDiaria(
     @Column(name = "total_ventas", nullable = false)
     val totalVentas: Int = 0,
 
-    // Mutables: el helper recalcularJornadaDiaria los actualiza al editar/eliminar partidas
     @Column(name = "total_billar", nullable = false)
     var totalBillar: Int = 0,
 

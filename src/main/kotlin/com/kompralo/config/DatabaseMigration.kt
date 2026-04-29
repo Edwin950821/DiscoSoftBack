@@ -49,7 +49,7 @@ class DatabaseMigration(
     @EventListener(ApplicationReadyEvent::class)
     fun migrateBillarTables() {
         try {
-            // Crear tablas si no existen
+
             jdbcTemplate.execute("""
                 CREATE TABLE IF NOT EXISTS disco_mesas_billar (
                     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -96,10 +96,8 @@ class DatabaseMigration(
                 )
             """.trimIndent())
 
-            // Eliminar constraint viejo UNIQUE(numero) si existe
             jdbcTemplate.execute("ALTER TABLE disco_mesas_billar DROP CONSTRAINT IF EXISTS disco_mesas_billar_numero_key")
 
-            // Agregar negocio_id si falta (tablas creadas por V5 sin ella)
             val cols = jdbcTemplate.queryForList(
                 "SELECT column_name FROM information_schema.columns WHERE table_name = 'disco_mesas_billar' AND column_name = 'negocio_id'"
             )
@@ -108,7 +106,6 @@ class DatabaseMigration(
                 jdbcTemplate.execute("ALTER TABLE disco_partidas_billar ADD COLUMN negocio_id UUID")
             }
 
-            // Indexes
             jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_partidas_billar_mesa ON disco_partidas_billar(mesa_billar_id)")
             jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_partidas_billar_fecha ON disco_partidas_billar(jornada_fecha)")
             jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_partidas_billar_estado ON disco_partidas_billar(estado)")
