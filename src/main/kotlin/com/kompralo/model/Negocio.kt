@@ -27,6 +27,10 @@ data class Negocio(
     @Column(nullable = false)
     var activo: Boolean = true,
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    val tipo: TipoNegocio = TipoNegocio.DISCOTECA,
+
     @Column(name = "creado_en", nullable = false, updatable = false)
     val creadoEn: LocalDateTime = LocalDateTime.now()
 )
