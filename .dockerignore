@@ -20,9 +20,10 @@ out
 .DS_Store
 Thumbs.db
 
-# Docs / metadata
-*.md
-README*
+# Docs / metadata (solo en raiz, no excluir .md de src/)
+/README*.md
+/CHANGELOG*.md
+/CLAUDE.md
 
 # Logs
 *.log
