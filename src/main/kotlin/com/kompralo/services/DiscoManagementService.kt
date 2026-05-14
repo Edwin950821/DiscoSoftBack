@@ -257,7 +257,7 @@ class DiscoManagementService(
     @Transactional
     fun updateJornada(id: UUID, req: DiscoJornadaRequest): DiscoJornadaResponse {
         val jornada = jornadaRepo.findById(id)
-            .orElseThrow { RuntimeException("Jornada no encontrada con id: $id") }
+            .orElseThrow { IllegalArgumentException("Jornada no encontrada con id: $id") }
         ensureMismoTenant(jornada.negocioId, "Jornada")
 
         val totalVendido = req.meseros.sumOf { it.totalMesero }
@@ -286,6 +286,7 @@ class DiscoManagementService(
         jornada.pagosVales = pagosVales
 
         jornada.meseros.clear()
+        jornadaRepo.saveAndFlush(jornada)
         val negocioId = tenantContext.getNegocioId()
         req.meseros.forEach { mReq ->
             val meseroJornada = DiscoMeseroJornada(
@@ -318,7 +319,7 @@ class DiscoManagementService(
     @Transactional
     fun deleteJornada(id: UUID) {
         val jornada = jornadaRepo.findById(id)
-            .orElseThrow { RuntimeException("Jornada no encontrada con id: $id") }
+            .orElseThrow { IllegalArgumentException("Jornada no encontrada con id: $id") }
         ensureMismoTenant(jornada.negocioId, "Jornada")
         jornadaRepo.delete(jornada)
     }
