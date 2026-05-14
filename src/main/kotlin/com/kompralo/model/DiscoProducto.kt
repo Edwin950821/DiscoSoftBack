@@ -13,10 +13,10 @@ data class DiscoProducto(
     val id: UUID? = null,
 
     @Column(nullable = false)
-    val nombre: String,
+    var nombre: String,
 
     @Column(nullable = false)
-    val precio: Int,
+    var precio: Int,
 
     @Column(nullable = false)
     var activo: Boolean = true,
