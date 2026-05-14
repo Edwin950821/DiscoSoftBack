@@ -74,8 +74,20 @@ class JwtAuthenticationFilter(
                     authToken.details = WebAuthenticationDetailsSource().buildDetails(request)
 
                     SecurityContextHolder.getContext().authentication = authToken
+                } else {
+                    response.status = HttpServletResponse.SC_UNAUTHORIZED
+                    response.contentType = "application/json"
+                    response.characterEncoding = "UTF-8"
+                    response.writer.write("""{"message":"Token expirado o inválido"}""")
+                    return
                 }
             }
+        } catch (e: org.springframework.security.core.userdetails.UsernameNotFoundException) {
+            response.status = HttpServletResponse.SC_UNAUTHORIZED
+            response.contentType = "application/json"
+            response.characterEncoding = "UTF-8"
+            response.writer.write("""{"message":"Sesión inválida: usuario no encontrado"}""")
+            return
         } catch (e: Exception) {
             logger.error("Error al procesar token JWT: ${e.message}")
         }
