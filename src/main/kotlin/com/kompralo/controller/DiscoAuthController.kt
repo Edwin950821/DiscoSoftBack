@@ -51,12 +51,12 @@ class DiscoAuthController(
             request.getHeader("Origin")?.startsWith("https://") == true
     }
 
-    private fun createAuthCookie(token: String, isSecure: Boolean): Cookie {
+    private fun createAuthCookie(token: String, isSecure: Boolean, rememberMe: Boolean = false): Cookie {
         return Cookie("authToken", token).apply {
             isHttpOnly = true
             secure = isSecure
             path = "/"
-            maxAge = 86400
+            maxAge = if (rememberMe) 30 * 24 * 60 * 60 else 86400
             setAttribute("SameSite", if (isSecure) "None" else "Lax")
         }
     }
@@ -98,7 +98,7 @@ class DiscoAuthController(
             val accessToken = jwtService.generateToken(user.email, user.role.name, request.rememberMe)
             val refreshToken = jwtService.generateToken(user.email, "refresh", request.rememberMe)
             val secure = isSecureRequest(servletRequest)
-            servletResponse.addCookie(createAuthCookie(accessToken, secure))
+            servletResponse.addCookie(createAuthCookie(accessToken, secure, request.rememberMe))
 
             val userNegocioId = user.negocioId
 
