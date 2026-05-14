@@ -13,10 +13,10 @@ data class DiscoJornada(
     val id: UUID? = null,
 
     @Column(nullable = false)
-    val sesion: String,
+    var sesion: String,
 
     @Column(nullable = false)
-    val fecha: String,
+    var fecha: String,
 
     @Column(name = "total_vendido", nullable = false)
     var totalVendido: Int = 0,

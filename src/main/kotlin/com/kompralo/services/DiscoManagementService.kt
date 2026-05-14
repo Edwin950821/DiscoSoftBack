@@ -36,6 +36,22 @@ class DiscoManagementService(
     @PersistenceContext
     private lateinit var entityManager: EntityManager
 
+    /**
+     * Valida que el recurso pertenezca al negocio del tenant actual.
+     * Lanza IllegalArgumentException si el recurso es de otro negocio.
+     * Esto previene que un admin de un negocio modifique/borre recursos de otro
+     * incluso si conoce su UUID (defensa en profundidad).
+     *
+     * Si `tenantId` se pasa explícito, se usa ese; sino se resuelve del contexto
+     * (usar el explícito cuando se valida en bucle para evitar N consultas a DB).
+     */
+    private fun ensureMismoTenant(recursoNegocioId: UUID?, recursoTipo: String, tenantId: UUID? = null) {
+        val tid = tenantId ?: tenantContext.getNegocioId()
+        if (recursoNegocioId != tid) {
+            throw IllegalArgumentException("$recursoTipo no pertenece al negocio actual")
+        }
+    }
+
     fun getAllProductos(): List<DiscoProductoResponse> {
         val negocioId = tenantContext.getNegocioId()
         return productoRepo.findByNegocioIdOrderByCreadoEnDesc(negocioId).map { it.toResponse() }
@@ -57,6 +73,7 @@ class DiscoManagementService(
     fun updateProducto(id: UUID, req: DiscoProductoUpdateRequest): DiscoProductoResponse {
         val producto = productoRepo.findById(id)
             .orElseThrow { RuntimeException("Producto no encontrado con id: $id") }
+        ensureMismoTenant(producto.negocioId, "Producto")
 
         val updated = producto.copy(
             nombre = req.nombre ?: producto.nombre,
@@ -70,6 +87,7 @@ class DiscoManagementService(
     fun deleteProducto(id: UUID) {
         val producto = productoRepo.findById(id)
             .orElseThrow { RuntimeException("Producto no encontrado con id: $id") }
+        ensureMismoTenant(producto.negocioId, "Producto")
         productoRepo.delete(producto)
     }
 
@@ -120,6 +138,7 @@ class DiscoManagementService(
     @Transactional
     fun updateMesero(id: UUID, req: DiscoMeseroUpdateRequest): DiscoMeseroResponse {
         val mesero = meseroRepo.findById(id).orElseThrow { IllegalArgumentException("Mesero no encontrado") }
+        ensureMismoTenant(mesero.negocioId, "Mesero")
         req.nombre?.let { mesero.nombre = it }
         req.color?.let { mesero.color = it }
         req.avatar?.let { mesero.avatar = it }
@@ -239,9 +258,71 @@ class DiscoManagementService(
     }
 
     @Transactional
+    fun updateJornada(id: UUID, req: DiscoJornadaRequest): DiscoJornadaResponse {
+        val jornada = jornadaRepo.findById(id)
+            .orElseThrow { RuntimeException("Jornada no encontrada con id: $id") }
+        ensureMismoTenant(jornada.negocioId, "Jornada")
+
+        val totalVendido = req.meseros.sumOf { it.totalMesero }
+        val cortesias = req.meseros.sumOf { it.cortesias }
+        val gastos = req.meseros.sumOf { it.gastos }
+        val pagosEfectivo = req.meseros.sumOf { it.pagos["Efectivo"] ?: 0 }
+        val pagosQR = req.meseros.sumOf { it.pagos["QR"] ?: 0 }
+        val pagosNequi = req.meseros.sumOf { it.pagos["Nequi"] ?: 0 }
+        val pagosDatafono = req.meseros.sumOf { it.pagos["Datafono"] ?: 0 }
+        val pagosVales = req.meseros.sumOf { it.pagos["Vales"] ?: 0 }
+        val totalRecibido = pagosEfectivo + pagosQR + pagosNequi + pagosDatafono + pagosVales
+        val esperado = totalVendido - cortesias - gastos
+        val saldo = totalRecibido - esperado
+
+        jornada.sesion = req.sesion
+        jornada.fecha = req.fecha
+        jornada.totalVendido = totalVendido
+        jornada.totalRecibido = totalRecibido
+        jornada.saldo = saldo
+        jornada.cortesias = cortesias
+        jornada.gastos = gastos
+        jornada.pagosEfectivo = pagosEfectivo
+        jornada.pagosQR = pagosQR
+        jornada.pagosNequi = pagosNequi
+        jornada.pagosDatafono = pagosDatafono
+        jornada.pagosVales = pagosVales
+
+        jornada.meseros.clear()
+        val negocioId = tenantContext.getNegocioId()
+        req.meseros.forEach { mReq ->
+            val meseroJornada = DiscoMeseroJornada(
+                meseroId = mReq.meseroId,
+                nombre = mReq.nombre,
+                color = mReq.color,
+                avatar = mReq.avatar,
+                totalMesero = mReq.totalMesero,
+                cortesias = mReq.cortesias,
+                gastos = mReq.gastos,
+                pagosEfectivo = mReq.pagos["Efectivo"] ?: 0,
+                pagosQR = mReq.pagos["QR"] ?: 0,
+                pagosNequi = mReq.pagos["Nequi"] ?: 0,
+                pagosDatafono = mReq.pagos["Datafono"] ?: 0,
+                pagosVales = mReq.pagos["Vales"] ?: 0,
+                transaccionesDetalle = if (mReq.transaccionesDetalle.isNotEmpty()) objectMapper.writeValueAsString(mReq.transaccionesDetalle) else null,
+                valesDetalle = if (mReq.valesDetalle.isNotEmpty()) objectMapper.writeValueAsString(mReq.valesDetalle) else null,
+                cortesiasDetalle = if (mReq.cortesiasDetalle.isNotEmpty()) objectMapper.writeValueAsString(mReq.cortesiasDetalle) else null,
+                gastosDetalle = if (mReq.gastosDetalle.isNotEmpty()) objectMapper.writeValueAsString(mReq.gastosDetalle) else null,
+                lineasDetalle = if (mReq.lineas.isNotEmpty()) objectMapper.writeValueAsString(mReq.lineas) else null,
+                negocioId = negocioId
+            )
+            meseroJornada.jornada = jornada
+            jornada.meseros.add(meseroJornada)
+        }
+
+        return jornadaRepo.save(jornada).toResponse()
+    }
+
+    @Transactional
     fun deleteJornada(id: UUID) {
         val jornada = jornadaRepo.findById(id)
             .orElseThrow { RuntimeException("Jornada no encontrada con id: $id") }
+        ensureMismoTenant(jornada.negocioId, "Jornada")
         jornadaRepo.delete(jornada)
     }
 
@@ -282,6 +363,7 @@ class DiscoManagementService(
     fun deleteInventario(id: UUID) {
         val inventario = inventarioRepo.findById(id)
             .orElseThrow { RuntimeException("Inventario no encontrado con id: $id") }
+        ensureMismoTenant(inventario.negocioId, "Inventario")
         inventarioRepo.delete(inventario)
     }
 
@@ -305,6 +387,7 @@ class DiscoManagementService(
     fun deleteMesa(id: UUID) {
         val mesa = mesaRepo.findById(id)
             .orElseThrow { RuntimeException("Mesa no encontrada con id: $id") }
+        ensureMismoTenant(mesa.negocioId, "Mesa")
         mesaRepo.delete(mesa)
     }
 
@@ -418,6 +501,7 @@ class DiscoManagementService(
     fun deleteComparativo(id: UUID) {
         val comparativo = comparativoRepo.findById(id)
             .orElseThrow { RuntimeException("Comparativo no encontrado con id: $id") }
+        ensureMismoTenant(comparativo.negocioId, "Comparativo")
         comparativoRepo.delete(comparativo)
     }
 
@@ -456,15 +540,18 @@ class DiscoManagementService(
 
     @Transactional
     fun createPromocion(req: DiscoPromocionRequest): DiscoPromocionResponse {
+        val negocioId = tenantContext.getNegocioId()
+
         val regaloProducto = productoRepo.findById(req.regaloProductoId)
             .orElseThrow { RuntimeException("Producto regalo no encontrado: ${req.regaloProductoId}") }
+        ensureMismoTenant(regaloProducto.negocioId, "Producto regalo", negocioId)
 
         req.compraProductoIds.forEach { id ->
-            productoRepo.findById(id)
+            val p = productoRepo.findById(id)
                 .orElseThrow { RuntimeException("Producto de compra no encontrado: $id") }
+            ensureMismoTenant(p.negocioId, "Producto de compra", negocioId)
         }
 
-        val negocioId = tenantContext.getNegocioId()
         val promo = DiscoPromocion(
             nombre = req.nombre,
             compraProductoIds = req.compraProductoIds.joinToString(","),
@@ -478,15 +565,25 @@ class DiscoManagementService(
 
     @Transactional
     fun updatePromocion(id: UUID, req: DiscoPromocionUpdateRequest): DiscoPromocionResponse {
+        val negocioId = tenantContext.getNegocioId()
+
         val promo = promocionRepo.findById(id)
             .orElseThrow { RuntimeException("Promoción no encontrada con id: $id") }
+        ensureMismoTenant(promo.negocioId, "Promoción", negocioId)
 
         val regaloProducto = if (req.regaloProductoId != null) {
-            productoRepo.findById(req.regaloProductoId)
+            val p = productoRepo.findById(req.regaloProductoId)
                 .orElseThrow { RuntimeException("Producto regalo no encontrado: ${req.regaloProductoId}") }
+            ensureMismoTenant(p.negocioId, "Producto regalo", negocioId)
+            p
         } else promo.regaloProducto
 
         val compraIds = if (req.compraProductoIds != null) {
+            req.compraProductoIds.forEach { pid ->
+                val p = productoRepo.findById(pid)
+                    .orElseThrow { RuntimeException("Producto de compra no encontrado: $pid") }
+                ensureMismoTenant(p.negocioId, "Producto de compra", negocioId)
+            }
             req.compraProductoIds.joinToString(",")
         } else promo.compraProductoIds
 
@@ -505,6 +602,7 @@ class DiscoManagementService(
     fun deletePromocion(id: UUID) {
         val promo = promocionRepo.findById(id)
             .orElseThrow { RuntimeException("Promoción no encontrada con id: $id") }
+        ensureMismoTenant(promo.negocioId, "Promoción")
         promocionRepo.delete(promo)
     }
 

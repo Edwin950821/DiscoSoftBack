@@ -3,6 +3,7 @@ package com.kompralo.controller
 import com.kompralo.dto.DiscoAuthResponse
 import com.kompralo.dto.DiscoLoginRequest
 import com.kompralo.dto.DiscoRol
+import com.kompralo.dto.NegocioInfo
 import com.kompralo.model.Role
 import com.kompralo.repository.DiscoMeseroRepository
 import com.kompralo.repository.NegocioRepository
@@ -33,12 +34,14 @@ class DiscoAuthController(
         DiscoRol.ADMINISTRADOR -> Role.ADMIN
         DiscoRol.DUENO -> Role.OWNER
         DiscoRol.MESERO -> Role.MESERO
+        DiscoRol.SUPER -> Role.SUPER
     }
 
     private fun roleToDiscoRol(role: Role): DiscoRol = when (role) {
         Role.ADMIN -> DiscoRol.ADMINISTRADOR
         Role.OWNER -> DiscoRol.DUENO
         Role.MESERO -> DiscoRol.MESERO
+        Role.SUPER -> DiscoRol.SUPER
         else -> throw IllegalArgumentException("Rol no autorizado para Monastery Club")
     }
 
@@ -87,7 +90,7 @@ class DiscoAuthController(
                 throw IllegalArgumentException("Usuario inactivo")
             }
 
-            val allowedRoles = listOf(Role.ADMIN, Role.OWNER, Role.MESERO)
+            val allowedRoles = listOf(Role.ADMIN, Role.OWNER, Role.MESERO, Role.SUPER)
             if (user.role !in allowedRoles) {
                 throw IllegalArgumentException("No tienes acceso a Monastery Club")
             }
@@ -97,12 +100,45 @@ class DiscoAuthController(
             val secure = isSecureRequest(servletRequest)
             servletResponse.addCookie(createAuthCookie(accessToken, secure))
 
-            val negocioId = user.negocioId
-            val negocio = negocioId?.let { negocioRepo.findById(it).orElse(null) }
+            val userNegocioId = user.negocioId
+
+            val negocios: List<NegocioInfo>
+            val negocioId: String?
+            val negocioNombre: String?
+
+            if (user.role == Role.SUPER) {
+                val activos = negocioRepo.findByActivoTrue()
+                negocios = activos.mapNotNull { neg ->
+                    val negId = neg.id?.toString() ?: return@mapNotNull null
+                    NegocioInfo(
+                        id = negId,
+                        nombre = neg.nombre,
+                        slug = neg.slug,
+                        colorPrimario = neg.colorPrimario,
+                        logoUrl = neg.logoUrl
+                    )
+                }
+                negocioId = null
+                negocioNombre = null
+            } else {
+                val negocio = userNegocioId?.let { negocioRepo.findById(it).orElse(null) }
+                val negIdStr = negocio?.id?.toString()
+                negocios = if (negocio != null && negIdStr != null) listOf(
+                    NegocioInfo(
+                        id = negIdStr,
+                        nombre = negocio.nombre,
+                        slug = negocio.slug,
+                        colorPrimario = negocio.colorPrimario,
+                        logoUrl = negocio.logoUrl
+                    )
+                ) else emptyList()
+                negocioId = userNegocioId?.toString()
+                negocioNombre = negocio?.nombre
+            }
 
             val meseroId = if (user.role == Role.MESERO && !user.username.isNullOrBlank()) {
-                if (negocioId != null) {
-                    meseroRepo.findByNegocioIdAndUsername(negocioId, user.username!!)?.id?.toString()
+                if (userNegocioId != null) {
+                    meseroRepo.findByNegocioIdAndUsername(userNegocioId, user.username!!)?.id?.toString()
                 } else {
                     meseroRepo.findByUsername(user.username!!)?.id?.toString()
                 }
@@ -114,8 +150,9 @@ class DiscoAuthController(
                 nombre = user.name,
                 rol = roleToDiscoRol(user.role),
                 meseroId = meseroId,
-                negocioId = negocioId?.toString(),
-                negocioNombre = negocio?.nombre,
+                negocioId = negocioId,
+                negocioNombre = negocioNombre,
+                negocios = negocios,
                 mensaje = "Bienvenido a Monastery Club"
             ))
 

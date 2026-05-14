@@ -143,6 +143,20 @@ class DiscoManagementController(
         }
     }
 
+    @PutMapping("/jornadas/{id}")
+    fun updateJornada(@PathVariable id: UUID, @RequestBody req: DiscoJornadaRequest): ResponseEntity<*> {
+        return try {
+            val jornada = discoManagementService.updateJornada(id, req)
+            ResponseEntity.ok(jornada)
+        } catch (e: IllegalArgumentException) {
+            ResponseEntity.badRequest().body(mapOf("message" to (e.message ?: "Datos inválidos")))
+        } catch (e: Exception) {
+            log.error("Error al actualizar jornada $id: ${e.message}", e)
+            ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(mapOf("message" to "Error al actualizar jornada"))
+        }
+    }
+
     @DeleteMapping("/jornadas/{id}")
     fun deleteJornada(@PathVariable id: UUID): ResponseEntity<Void> {
         return try {

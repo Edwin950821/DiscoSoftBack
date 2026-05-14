@@ -115,5 +115,6 @@ enum class Role {
     MANAGER,
     ACCOUNTANT,
     VIEWER,
-    MESERO
+    MESERO,
+    SUPER
 }

@@ -52,7 +52,8 @@ class SecurityConfig(
                     "/api/disco/auth/**",
                     "/api/disco/management/**",
                     "/api/disco/pedidos/**",
-                    "/api/disco/billar/**"
+                    "/api/disco/billar/**",
+                    "/api/disco/super/**"
                 )
             }
             .headers { headers ->
@@ -94,7 +95,8 @@ class SecurityConfig(
                     .requestMatchers(
                         "/api/disco/management/**",
                         "/api/disco/pedidos/**",
-                        "/api/disco/billar/**"
+                        "/api/disco/billar/**",
+                        "/api/disco/super/**"
                     ).authenticated()
                     .anyRequest().authenticated()
             }
