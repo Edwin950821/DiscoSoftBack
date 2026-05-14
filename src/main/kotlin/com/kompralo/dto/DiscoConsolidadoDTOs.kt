@@ -5,10 +5,52 @@ data class NegocioConsolidado(
     val nombre: String,
     val slug: String,
     val colorPrimario: String,
+    val tipo: String,
     val totalVendido: Long,
     val totalRecibido: Long,
     val saldo: Long,
-    val jornadasCount: Int
+    val jornadasCount: Int,
+    val diaSemanaMasFuerte: String? = null,
+    val sparkline7Dias: List<Long> = emptyList()
+)
+
+data class TopProducto(
+    val productoId: String,
+    val nombre: String,
+    val cantidad: Int,
+    val total: Long
+)
+
+data class TopMesero(
+    val meseroId: String,
+    val nombre: String,
+    val color: String,
+    val totalVendido: Long,
+    val jornadasCount: Int,
+    val negocioId: String,
+    val negocioNombre: String,
+    val negocioColor: String
+)
+
+data class TendenciaDia(
+    val fecha: String,
+    val total: Long
+)
+
+data class BarraComparativo(
+    val negocioId: String,
+    val negocioNombre: String,
+    val negocioColor: String,
+    val negocioTipo: String,
+    val totalVendido: Long,
+    val totalNegocio: Long,
+    val pctDelNegocio: Double,
+    val jornadasCount: Int,
+    val pagosEfectivo: Long,
+    val pagosQR: Long,
+    val pagosNequi: Long,
+    val pagosDatafono: Long,
+    val pagosVales: Long
 )
 
 data class ConsolidadoResponse(
@@ -22,5 +64,11 @@ data class ConsolidadoResponse(
     val porNegocio: List<NegocioConsolidado>,
     // Totales por medio de pago sumando TODOS los negocios
     // Keys: "Efectivo", "QR", "Nequi", "Datafono", "Vales"
-    val pagosTotales: Map<String, Long> = emptyMap()
+    val pagosTotales: Map<String, Long> = emptyMap(),
+    val totalMesActual: Long = 0,
+    val totalMesAnterior: Long = 0,
+    val tendencia30Dias: List<TendenciaDia> = emptyList(),
+    val topProductos: List<TopProducto> = emptyList(),
+    val topMeseros: List<TopMesero> = emptyList(),
+    val comparativoBarras: List<BarraComparativo> = emptyList()
 )

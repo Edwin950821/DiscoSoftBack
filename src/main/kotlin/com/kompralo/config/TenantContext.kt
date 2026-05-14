@@ -23,6 +23,19 @@ class TenantContext(
         val user = userRepository.findByEmail(email)
             .or { userRepository.findByUsername(email) }
             .orElseThrow { IllegalStateException("Usuario no encontrado: $email") }
+        if (user.role == Role.SUPER) {
+            val raw = request.getHeader("X-Negocio-Id")
+                ?: throw IllegalStateException("Falta header X-Negocio-Id (requerido para SUPER)")
+            val negocioId = try {
+                UUID.fromString(raw.trim())
+            } catch (e: IllegalArgumentException) {
+                throw IllegalStateException("X-Negocio-Id inválido: $raw")
+            }
+            if (!negocioRepository.existsById(negocioId)) {
+                throw IllegalStateException("Negocio no encontrado: $negocioId")
+            }
+            return negocioId
+        }
 
         // SUPER: el negocio activo se selecciona vía header X-Negocio-Id
         // (los demás roles ignoran el header para evitar escalada de privilegio).

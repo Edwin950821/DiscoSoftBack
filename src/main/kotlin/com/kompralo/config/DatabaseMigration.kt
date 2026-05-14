@@ -45,4 +45,76 @@ class DatabaseMigration(
             log.error("FK migration skipped: ${e.message}")
         }
     }
+
+    @EventListener(ApplicationReadyEvent::class)
+    fun migrateBillarTables() {
+        try {
+
+            jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS disco_mesas_billar (
+                    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    numero          INT NOT NULL,
+                    nombre          VARCHAR(255) NOT NULL,
+                    precio_por_hora INT NOT NULL DEFAULT 20000,
+                    estado          VARCHAR(20) NOT NULL DEFAULT 'LIBRE',
+                    activo          BOOLEAN NOT NULL DEFAULT TRUE,
+                    creado_en       TIMESTAMP NOT NULL DEFAULT NOW(),
+                    negocio_id      UUID
+                )
+            """.trimIndent())
+
+            jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS disco_partidas_billar (
+                    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    mesa_billar_id  UUID NOT NULL REFERENCES disco_mesas_billar(id),
+                    nombre_cliente  VARCHAR(255) DEFAULT 'Cliente',
+                    hora_inicio     TIMESTAMP NOT NULL DEFAULT NOW(),
+                    hora_fin        TIMESTAMP,
+                    precio_por_hora INT NOT NULL,
+                    horas_cobradas  INT,
+                    total           INT,
+                    estado          VARCHAR(20) NOT NULL DEFAULT 'EN_JUEGO',
+                    jornada_fecha   VARCHAR(10) NOT NULL,
+                    creado_en       TIMESTAMP NOT NULL DEFAULT NOW(),
+                    negocio_id      UUID
+                )
+            """.trimIndent())
+
+            jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS disco_jornada_diaria (
+                    id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    fecha             VARCHAR(10) NOT NULL,
+                    total_ventas      INT NOT NULL DEFAULT 0,
+                    total_billar      INT NOT NULL DEFAULT 0,
+                    total_general     INT NOT NULL DEFAULT 0,
+                    cuentas_cerradas  INT NOT NULL DEFAULT 0,
+                    tickets_totales   INT NOT NULL DEFAULT 0,
+                    mesas_atendidas   INT NOT NULL DEFAULT 0,
+                    partidas_billar   INT NOT NULL DEFAULT 0,
+                    cerrado_en        TIMESTAMP NOT NULL DEFAULT NOW(),
+                    negocio_id        UUID
+                )
+            """.trimIndent())
+
+            jdbcTemplate.execute("ALTER TABLE disco_mesas_billar DROP CONSTRAINT IF EXISTS disco_mesas_billar_numero_key")
+
+            val cols = jdbcTemplate.queryForList(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = 'disco_mesas_billar' AND column_name = 'negocio_id'"
+            )
+            if (cols.isEmpty()) {
+                jdbcTemplate.execute("ALTER TABLE disco_mesas_billar ADD COLUMN negocio_id UUID")
+                jdbcTemplate.execute("ALTER TABLE disco_partidas_billar ADD COLUMN negocio_id UUID")
+            }
+
+            jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_partidas_billar_mesa ON disco_partidas_billar(mesa_billar_id)")
+            jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_partidas_billar_fecha ON disco_partidas_billar(jornada_fecha)")
+            jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_partidas_billar_estado ON disco_partidas_billar(estado)")
+            jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_mesas_billar_negocio ON disco_mesas_billar(negocio_id)")
+            jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_partidas_billar_negocio ON disco_partidas_billar(negocio_id)")
+
+            log.info("Billar tables ready")
+        } catch (e: Exception) {
+            log.error("Billar migration error: ${e.message}", e)
+        }
+    }
 }

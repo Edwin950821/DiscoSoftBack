@@ -27,8 +27,7 @@ class DiscoPedidoService(
 
     private val tenantId: String get() = tenantContext.getNegocioId().toString()
 
-    // El "día" cambia a las 6AM Colombia, no a medianoche.
-    // Así una jornada nocturna (ej: 2PM a 3AM) queda en una sola fecha.
+
     private val hoy: String get() {
         val ahora = LocalDateTime.now(ZoneId.of("America/Bogota"))
         val fechaJornada = if (ahora.hour < 6) ahora.minusDays(1) else ahora

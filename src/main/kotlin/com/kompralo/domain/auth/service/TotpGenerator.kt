@@ -16,7 +16,7 @@ class TotpGenerator {
 
     fun generateSecret(): TotpSecret {
         val random = SecureRandom()
-        val bytes = ByteArray(20) // 160 bits
+        val bytes = ByteArray(20)
         random.nextBytes(bytes)
         val secret = base32.encodeToString(bytes).replace("=", "")
         return TotpSecret(secret)
@@ -39,7 +39,6 @@ class TotpGenerator {
         try {
             val currentTimeSlot = System.currentTimeMillis() / 1000 / 30
 
-            // Verificar ventana de ±1 (compensar desincronización)
             for (i in -1..1) {
                 val timeSlot = currentTimeSlot + i
                 val generatedCode = generateTOTP(secret, timeSlot)

@@ -17,7 +17,7 @@ data class DiscoPartidaBillar(
     var mesaBillar: DiscoMesaBillar,
 
     @Column(name = "nombre_cliente")
-    val nombreCliente: String = "Cliente",
+    var nombreCliente: String = "Cliente",
 
     @Column(name = "hora_inicio", nullable = false)
     val horaInicio: LocalDateTime = LocalDateTime.now(),
@@ -43,6 +43,6 @@ data class DiscoPartidaBillar(
     @Column(name = "creado_en", nullable = false, updatable = false)
     val creadoEn: LocalDateTime = LocalDateTime.now(),
 
-    @Column(name = "negocio_id", nullable = true, columnDefinition = "uuid")
+    @Column(name = "negocio_id", columnDefinition = "uuid")
     val negocioId: UUID = UUID(0, 0)
 )

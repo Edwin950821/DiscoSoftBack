@@ -21,7 +21,6 @@ data class User(
         require(name.isNotBlank()) { "Nombre no puede estar vacío" }
     }
 
-    // Lógica de dominio
     fun isComprador(): Boolean = role == Role.USER
 
     fun isVendedor(): Boolean = role == Role.BUSINESS

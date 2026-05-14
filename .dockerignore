@@ -1,0 +1,35 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Gradle
+.gradle
+build
+**/build
+out
+
+# IDE
+.idea
+.vscode
+*.iml
+*.ipr
+*.iws
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docs / metadata (solo en raiz, no excluir .md de src/)
+/README*.md
+/CHANGELOG*.md
+/CLAUDE.md
+
+# Logs
+*.log
+logs
+
+# Local config
+.env
+.env.local
+*.local

@@ -17,14 +17,13 @@ import kotlin.math.ceil
 class DiscoBillarService(
     private val mesaBillarRepo: DiscoMesaBillarRepository,
     private val partidaRepo: DiscoPartidaBillarRepository,
+    private val jornadaDiariaRepo: DiscoJornadaDiariaRepository,
     private val socketIO: SocketIOService,
     private val tenantContext: TenantContext
 ) {
 
     private val tenantId: String get() = tenantContext.getNegocioId().toString()
 
-    // El "día" cambia a las 6AM Colombia, no a medianoche.
-    // Así una jornada nocturna (ej: 2PM a 3AM) queda en una sola fecha.
     private val hoy: String get() {
         val ahora = LocalDateTime.now(ZoneId.of("America/Bogota"))
         val fechaJornada = if (ahora.hour < 6) ahora.minusDays(1) else ahora
@@ -44,7 +43,9 @@ class DiscoBillarService(
     @Transactional
     fun createMesaBillar(req: DiscoMesaBillarRequest): DiscoMesaBillarResponse {
         val negocioId = tenantContext.getNegocioId()
-        val nextNumero = mesaBillarRepo.findMaxNumeroByNegocioId(negocioId) + 1
+        val maxByNegocio = mesaBillarRepo.findMaxNumeroByNegocioId(negocioId)
+        val maxGlobal = mesaBillarRepo.findMaxNumeroGlobal()
+        val nextNumero = maxOf(maxByNegocio, maxGlobal) + 1
 
         val mesa = DiscoMesaBillar(
             numero = nextNumero,
@@ -152,7 +153,6 @@ class DiscoBillarService(
         if (mesaDestino.estado == "EN_JUEGO") throw IllegalStateException("La mesa de destino ya tiene una partida activa")
         if (!mesaDestino.activo) throw IllegalStateException("La mesa de destino no esta activa")
 
-        // Mover partida a mesa destino
         partida.mesaBillar = mesaDestino
         mesaOrigen.estado = "LIBRE"
         mesaDestino.estado = "EN_JUEGO"
@@ -166,10 +166,69 @@ class DiscoBillarService(
         return response
     }
 
+    @Transactional
+    fun editarPartida(partidaId: UUID, req: DiscoEditarPartidaRequest): DiscoPartidaBillarResponse {
+        val negocioId = tenantContext.getNegocioId()
+        val partida = partidaRepo.findById(partidaId)
+            .orElseThrow { NoSuchElementException("Partida no encontrada") }
+
+        if (partida.negocioId != negocioId) throw IllegalStateException("No autorizado")
+        if (partida.estado != "FINALIZADA") throw IllegalStateException("Solo se pueden editar partidas finalizadas")
+
+        req.nombreCliente?.let { partida.nombreCliente = it }
+        req.horasCobradas?.let { partida.horasCobradas = it }
+        req.total?.let { partida.total = it }
+
+        val saved = partidaRepo.saveAndFlush(partida)
+
+
+        recalcularJornadaDiaria(negocioId, saved.jornadaFecha)
+
+        val response = saved.toResponse()
+        socketIO.sendToAdmin("billar_partida_editada", response, tenantId)
+        return response
+    }
+
+    @Transactional
+    fun eliminarPartida(partidaId: UUID) {
+        val negocioId = tenantContext.getNegocioId()
+        val partida = partidaRepo.findById(partidaId)
+            .orElseThrow { NoSuchElementException("Partida no encontrada") }
+
+        if (partida.negocioId != negocioId) throw IllegalStateException("No autorizado")
+        if (partida.estado == "EN_JUEGO") throw IllegalStateException("No se puede eliminar una partida en juego")
+
+        val jornadaFecha = partida.jornadaFecha
+        partidaRepo.delete(partida)
+        partidaRepo.flush()
+
+
+        recalcularJornadaDiaria(negocioId, jornadaFecha)
+
+        socketIO.sendToAdmin("billar_partida_eliminada", mapOf("id" to partidaId), tenantId)
+    }
+
+
+    private fun recalcularJornadaDiaria(negocioId: UUID, fecha: String) {
+        val jornada = jornadaDiariaRepo.findByNegocioIdAndFecha(negocioId, fecha) ?: return
+        val finalizadas = partidaRepo.findByNegocioIdAndJornadaFechaAndEstado(negocioId, fecha, "FINALIZADA")
+        val totalBillar = finalizadas.sumOf { it.total ?: 0 }
+        jornada.totalBillar = totalBillar
+        jornada.partidasBillar = finalizadas.size
+        jornada.totalGeneral = jornada.totalVentas + totalBillar
+        jornadaDiariaRepo.save(jornada)
+    }
+
     @Transactional(readOnly = true)
     fun getPartidasHoy(): List<DiscoPartidaBillarResponse> {
         val negocioId = tenantContext.getNegocioId()
         return partidaRepo.findByNegocioIdAndJornadaFechaOrderByCreadoEnDesc(negocioId, hoy).map { it.toResponse() }
+    }
+
+    @Transactional(readOnly = true)
+    fun getPartidasPorFecha(fecha: String): List<DiscoPartidaBillarResponse> {
+        val negocioId = tenantContext.getNegocioId()
+        return partidaRepo.findByNegocioIdAndJornadaFechaOrderByCreadoEnDesc(negocioId, fecha).map { it.toResponse() }
     }
 
     @Transactional(readOnly = true)

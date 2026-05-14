@@ -5,7 +5,7 @@ import com.kompralo.domain.auth.repository.TwoFactorAuthRepository
 import com.kompralo.infrastructure.persistence.mapper.TwoFactorAuthMapper
 import com.kompralo.infrastructure.persistence.repository.JpaTwoFactorAuthRepository
 import org.springframework.transaction.annotation.Transactional
-// @Repository removido para evitar que Spring cree este bean (usa com.kompralo.repository en su lugar)
+
 class TwoFactorAuthRepositoryAdapter(
     private val jpaRepository: JpaTwoFactorAuthRepository,
     private val mapper: TwoFactorAuthMapper

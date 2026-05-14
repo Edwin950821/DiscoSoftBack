@@ -13,4 +13,7 @@ interface DiscoMesaBillarRepository : JpaRepository<DiscoMesaBillar, UUID> {
 
     @Query("SELECT COALESCE(MAX(m.numero), 0) FROM DiscoMesaBillar m WHERE m.negocioId = :negocioId")
     fun findMaxNumeroByNegocioId(@Param("negocioId") negocioId: UUID): Int
+
+    @Query("SELECT COALESCE(MAX(m.numero), 0) FROM DiscoMesaBillar m")
+    fun findMaxNumeroGlobal(): Int
 }

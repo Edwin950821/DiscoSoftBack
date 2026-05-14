@@ -115,12 +115,60 @@ class DiscoBillarController(
         }
     }
 
+    @PatchMapping("/partidas/{id}")
+    fun editarPartida(@PathVariable id: UUID, @RequestBody req: DiscoEditarPartidaRequest): ResponseEntity<*> {
+        return try {
+            val partida = billarService.editarPartida(id, req)
+            ResponseEntity.ok(partida)
+        } catch (e: IllegalStateException) {
+            ResponseEntity.badRequest().body(mapOf("message" to (e.message ?: "No se puede editar")))
+        } catch (e: NoSuchElementException) {
+            ResponseEntity.status(HttpStatus.NOT_FOUND).body(mapOf("message" to (e.message ?: "No encontrada")))
+        } catch (e: Exception) {
+            log.error("Error al editar partida $id: ${e.message}", e)
+            ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(mapOf("message" to "Error al editar partida"))
+        }
+    }
+
+    @DeleteMapping("/partidas/{id}")
+    fun eliminarPartida(@PathVariable id: UUID): ResponseEntity<*> {
+        return try {
+            billarService.eliminarPartida(id)
+            ResponseEntity.noContent().build<Void>()
+        } catch (e: IllegalStateException) {
+            ResponseEntity.badRequest().body(mapOf("message" to (e.message ?: "No se puede eliminar")))
+        } catch (e: NoSuchElementException) {
+            ResponseEntity.status(HttpStatus.NOT_FOUND).body(mapOf("message" to (e.message ?: "No encontrada")))
+        } catch (e: Exception) {
+            log.error("Error al eliminar partida $id: ${e.message}", e)
+            ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(mapOf("message" to "Error al eliminar partida"))
+        }
+    }
+
     @GetMapping("/partidas/hoy")
     fun getPartidasHoy(): ResponseEntity<*> {
         return try {
             ResponseEntity.ok(billarService.getPartidasHoy())
         } catch (e: Exception) {
             log.error("Error al obtener partidas de hoy: ${e.message}", e)
+            ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(mapOf("message" to "Error al obtener partidas"))
+        }
+    }
+
+    @GetMapping("/partidas")
+    fun getPartidasPorFecha(@RequestParam fecha: String): ResponseEntity<*> {
+
+        if (!fecha.matches(Regex("^\\d{4}-\\d{2}-\\d{2}$"))) {
+            return ResponseEntity.badRequest()
+                .body(mapOf("message" to "Formato de fecha invalido. Use YYYY-MM-DD"))
+        }
+        return try {
+            ResponseEntity.ok(billarService.getPartidasPorFecha(fecha))
+        } catch (e: Exception) {
+            log.error("Error al obtener partidas de $fecha: ${e.message}", e)
             ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(mapOf("message" to "Error al obtener partidas"))
         }

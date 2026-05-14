@@ -30,6 +30,6 @@ data class DiscoMesaBillar(
     @Column(name = "creado_en", nullable = false, updatable = false)
     val creadoEn: LocalDateTime = LocalDateTime.now(),
 
-    @Column(name = "negocio_id", nullable = true, columnDefinition = "uuid")
+    @Column(name = "negocio_id", columnDefinition = "uuid")
     val negocioId: UUID = UUID(0, 0)
 )
