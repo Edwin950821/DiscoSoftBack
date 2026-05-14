@@ -31,10 +31,6 @@ class DataCleanupService(
         }
     }
 
-    /**
-     * Asigna negocio_id a filas existentes que lo tengan NULL.
-     * Usa el primer negocio encontrado. Excluye tablas de billar.
-     */
     private fun migrarNegocioId() {
         val tablas = listOf(
             "disco_mesas",

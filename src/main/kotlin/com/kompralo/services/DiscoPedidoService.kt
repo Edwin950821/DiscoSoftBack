@@ -27,7 +27,6 @@ class DiscoPedidoService(
 
     private val tenantId: String get() = tenantContext.getNegocioId().toString()
 
-
     private val hoy: String get() {
         val ahora = LocalDateTime.now(ZoneId.of("America/Bogota"))
         val fechaJornada = if (ahora.hour < 6) ahora.minusDays(1) else ahora

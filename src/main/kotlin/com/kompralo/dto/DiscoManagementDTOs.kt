@@ -2,7 +2,6 @@ package com.kompralo.dto
 
 import java.util.UUID
 
-
 data class DiscoProductoRequest(
     val nombre: String,
     val precio: Int,
@@ -21,7 +20,6 @@ data class DiscoProductoUpdateRequest(
     val precio: Int? = null,
     val activo: Boolean? = null
 )
-
 
 data class DiscoMeseroRequest(
     val nombre: String,
@@ -47,7 +45,6 @@ data class DiscoMeseroUpdateRequest(
     val avatar: String? = null,
     val activo: Boolean? = null
 )
-
 
 data class TransaccionDetalleDTO(
     val tipo: String = "",
@@ -129,7 +126,6 @@ data class DiscoJornadaResponse(
     val saldo: Int
 )
 
-
 data class DiscoLineaInventarioRequest(
     val productoId: UUID,
     val nombre: String,
@@ -164,7 +160,6 @@ data class DiscoInventarioResponse(
     val lineas: List<DiscoLineaInventarioResponse>,
     val totalGeneral: Int
 )
-
 
 data class DiscoLineaComparativoRequest(
     val productoId: UUID,

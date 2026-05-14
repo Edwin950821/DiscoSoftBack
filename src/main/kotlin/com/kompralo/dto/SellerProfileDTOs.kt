@@ -5,10 +5,6 @@ import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
 import java.math.BigDecimal
 
-/**
- * DTO para registro de vendedor
- * Combina información de usuario + perfil de vendedor
- */
 data class SellerRegisterRequest(
 
     @field:NotBlank(message = "El email es requerido")
@@ -45,9 +41,6 @@ data class SellerRegisterRequest(
     val country: String = "Colombia"
 )
 
-/**
- * DTO para actualizar perfil de vendedor
- */
 data class UpdateSellerProfileRequest(
     val businessName: String? = null,
 
@@ -79,9 +72,6 @@ data class UpdateSellerProfileRequest(
     val country: String? = null
 )
 
-/**
- * DTO de respuesta para perfil de vendedor
- */
 data class SellerProfileResponse(
     val id: Long,
     val userId: Long,
@@ -108,9 +98,6 @@ data class SellerProfileResponse(
     val updatedAt: String
 )
 
-/**
- * DTO de respuesta para vendedor público (sin datos sensibles)
- */
 data class PublicSellerProfileResponse(
     val id: Long,
     val businessName: String,

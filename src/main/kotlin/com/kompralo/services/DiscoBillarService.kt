@@ -18,11 +18,40 @@ class DiscoBillarService(
     private val mesaBillarRepo: DiscoMesaBillarRepository,
     private val partidaRepo: DiscoPartidaBillarRepository,
     private val jornadaDiariaRepo: DiscoJornadaDiariaRepository,
+    private val negocioRepo: NegocioRepository,
     private val socketIO: SocketIOService,
     private val tenantContext: TenantContext
 ) {
 
     private val tenantId: String get() = tenantContext.getNegocioId().toString()
+
+    private fun notifySuper(modulo: String, accion: String, recursoId: String?, descripcion: String?) {
+        val negocioId = try { tenantContext.getNegocioId() } catch (_: Exception) { return }
+        val negocio = try { negocioRepo.findById(negocioId).orElse(null) } catch (_: Exception) { null }
+
+        val payload = mapOf(
+            "id" to UUID.randomUUID().toString(),
+            "negocioId" to negocioId.toString(),
+            "negocioNombre" to (negocio?.nombre ?: "Desconocido"),
+            "negocioColor" to (negocio?.colorPrimario ?: "#888"),
+            "modulo" to modulo,
+            "accion" to accion,
+            "recursoId" to recursoId,
+            "descripcion" to descripcion,
+            "timestamp" to java.time.Instant.now().toString()
+        )
+
+        val enviar = { runCatching { socketIO.sendToSuper("super_actualizacion", payload) } }
+        if (org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive()) {
+            org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                object : org.springframework.transaction.support.TransactionSynchronization {
+                    override fun afterCommit() { enviar() }
+                }
+            )
+        } else {
+            enviar()
+        }
+    }
 
     private val hoy: String get() {
         val ahora = LocalDateTime.now(ZoneId.of("America/Bogota"))
@@ -71,6 +100,7 @@ class DiscoBillarService(
         val saved = mesaBillarRepo.save(mesa)
         val negocioId = tenantContext.getNegocioId()
         val partidaActiva = partidaRepo.findByNegocioIdAndMesaBillarIdAndEstado(negocioId, id, "EN_JUEGO")
+        notifySuper("MESA_BILLAR", "UPDATE", id.toString(), "Mesa \"${saved.nombre}\" actualizada")
         return saved.toResponse(partidaActiva)
     }
 
@@ -181,7 +211,6 @@ class DiscoBillarService(
 
         val saved = partidaRepo.saveAndFlush(partida)
 
-
         recalcularJornadaDiaria(negocioId, saved.jornadaFecha)
 
         val response = saved.toResponse()
@@ -202,12 +231,10 @@ class DiscoBillarService(
         partidaRepo.delete(partida)
         partidaRepo.flush()
 
-
         recalcularJornadaDiaria(negocioId, jornadaFecha)
 
         socketIO.sendToAdmin("billar_partida_eliminada", mapOf("id" to partidaId), tenantId)
     }
-
 
     private fun recalcularJornadaDiaria(negocioId: UUID, fecha: String) {
         val jornada = jornadaDiariaRepo.findByNegocioIdAndFecha(negocioId, fecha) ?: return

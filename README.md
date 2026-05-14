@@ -27,7 +27,7 @@ src/main/kotlin/com/kompralo/
 ├── dto/                        DTOs de request/response
 ├── mapper/  domain/  port/  application/  infrastructure/   Capas auxiliares hexagonales
 └── exception/                  Manejo global de errores
-sql/                            Migraciones SQL (V1..V6) de tablas disco, billar, super, etc.
+sql/                            Migraciones SQL (V1..V7) de tablas disco, billar, super, tipo de negocio, etc.
 ```
 
 ## Módulos principales
@@ -38,7 +38,7 @@ sql/                            Migraciones SQL (V1..V6) de tablas disco, billar
 | Pedidos | `/api/disco/pedidos` | Atender mesa, despachar, cancelar, aplicar promos, pagar, jornada (resumen / historial / cerrar) |
 | Billar | `/api/disco/billar` | CRUD mesas, iniciar/finalizar/trasladar partidas, edición y borrado de partidas con recálculo |
 | Management | `/api/disco/management` | Productos, meseros, jornadas, inventarios, mesas, comparativos, promociones |
-| Super | `/api/disco/super` | Dashboard consolidado multi-negocio (solo rol `SUPER`): totales, pagos por método, tendencia 30d, top productos, top meseros, delta mes |
+| Super | `/api/disco/super` | Dashboard consolidado multi-negocio (solo rol `SUPER`): KPIs filtrables por tipo de negocio, negocio individual y rango temporal; comparativos por negocio, tendencia 30d, sparkline 7d, top productos, top meseros (excluye Barras), delta mes, **Comparativo de Barras** dedicado |
 | Health | `/api/auth/health` | Healthcheck |
 
 ## Configuración
@@ -93,11 +93,35 @@ Esto arranca PostgreSQL (`kompralo-db`, puerto `5432`) y la app (`kompralo-app`,
 
 ## Tiempo real (Socket.IO)
 
-`SocketIOService` y `SocketIOConfig` arrancan un servidor Netty en el puerto `3001`. Los clientes (frontends DiscoSoft) se suscriben para recibir actualizaciones de pedidos, partidas de billar y cierre de jornada.
+`SocketIOService` y `SocketIOConfig` arrancan un servidor Netty en el puerto `3001`. Token de autenticación se lee del handshake en este orden: `auth.token` (preferido) → cookie `authToken` → query `?token=`.
+
+**Rooms automáticas por rol:**
+
+| Rol | Rooms |
+|---|---|
+| `ADMIN` / `OWNER` | `disco_admin`, `disco_admin_${negocioId}` |
+| `MESERO` | `disco_meseros`, `disco_meseros_${negocioId}`, `disco_mesero_${meseroId}` |
+| `SUPER` | `disco_super` |
+
+**Eventos emitidos:**
+
+- Pedidos / Billar (`disco_admin`, `disco_meseros`): `nuevo_pedido`, `mesa_ocupada`, `pedido_despachado`, `cuenta_pagada`, `cortesia_aplicada`, etc.
+- SUPER (`disco_super`): `super_actualizacion` con payload `{ negocioId, negocioNombre, negocioColor, modulo: 'LIQUIDACION'|'INVENTARIO', accion: 'CREATE'|'DELETE', descripcion, timestamp }` — emitido **post-commit** (vía `TransactionSynchronizationManager.afterCommit`) cuando un ADMIN crea o elimina una jornada o un inventario.
 
 ## Multi-tenant
 
-Cada `Negocio` tiene su propio conjunto de jornadas, productos y meseros. `TenantContext` resuelve el negocio activo a partir del JWT; los endpoints `update`/`delete` validan que el recurso pertenezca al tenant antes de aplicar cambios. El rol `SUPER` puede consultar el consolidado a través de `/api/disco/super/consolidado`.
+Cada `Negocio` tiene su propio conjunto de jornadas, productos y meseros. `TenantContext` resuelve el negocio activo a partir del JWT; los endpoints `update`/`delete` validan que el recurso pertenezca al tenant antes de aplicar cambios.
+
+**Tipo de negocio** (`V7__negocios_tipo.sql`): cada negocio tiene `tipo IN ('DISCOTECA', 'BILLAR')` — el dashboard SUPER lo usa para segmentar.
+
+**Mesero "Barra"** (caso especial): por convención, cada negocio tiene un mesero llamado `Barra` que representa el punto de venta principal (mostrador / caja), no una persona. Se identifica por `LOWER(nombre) = 'barra'` en `disco_meseros`. El endpoint `/super/consolidado` devuelve un array `comparativoBarras` separado del top de meseros.
+
+**Rol SUPER**:
+- Consulta `/api/disco/super/consolidado` con query params opcionales:
+  - `?tipo=DISCOTECA|BILLAR` — filtra por tipo de negocio
+  - `?negocioId=<uuid>` — filtra a un único negocio
+  - `?rango=HOY|7D|30D|MES_ACTUAL|ESTE_ANO|TODO` — rango temporal (default `TODO`)
+- **Solo lectura**: `SuperReadOnlyFilter` rechaza con `403` cualquier `POST/PUT/PATCH/DELETE` sobre endpoints tenant (`/management`, `/pedidos`, `/billar`).
 
 ## Tests
 

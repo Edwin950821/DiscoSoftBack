@@ -4,32 +4,27 @@ import jakarta.persistence.*
 import java.time.LocalDateTime
 
 enum class NotificationType {
-   
+
     PRODUCT_CREATED,
     PRODUCT_UPDATED,
     PRODUCT_DELETED,
     STOCK_RESTOCKED,
 
-   
     LOW_STOCK,
     OUT_OF_STOCK,
 
-  
     NEW_ORDER,
     ORDER_PAID,
-
 
     NEW_REVIEW,
     WITHDRAWAL_READY,
     ACCOUNT_VERIFICATION,
 
- 
     ORDER_CONFIRMED,
     ORDER_SHIPPED,
     ORDER_DELIVERED,
     ORDER_CANCELLED,
 
-    
     PRICE_DROP,
     BACK_IN_STOCK,
     PROMO_OFFER,

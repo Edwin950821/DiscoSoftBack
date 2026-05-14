@@ -2,9 +2,6 @@ package com.kompralo.dto
 
 import jakarta.validation.constraints.Size
 
-/**
- * DTO para actualizar perfil de usuario
- */
 data class UpdateUserProfileRequest(
     @field:Size(max = 20, message = "El teléfono no puede exceder 20 caracteres")
     val phone: String? = null,
@@ -26,9 +23,6 @@ data class UpdateUserProfileRequest(
     val country: String? = null
 )
 
-/**
- * DTO de respuesta para perfil de usuario
- */
 data class UserProfileResponse(
     val id: Long,
     val userId: Long,

@@ -5,7 +5,8 @@ enum class DiscoRol { ADMINISTRADOR, DUENO, MESERO, SUPER }
 data class DiscoLoginRequest(
     val username: String,
     val password: String,
-    val rol: DiscoRol = DiscoRol.ADMINISTRADOR
+    val rol: DiscoRol = DiscoRol.ADMINISTRADOR,
+    val rememberMe: Boolean = false
 )
 
 data class NegocioInfo(
@@ -13,7 +14,8 @@ data class NegocioInfo(
     val nombre: String,
     val slug: String,
     val colorPrimario: String,
-    val logoUrl: String? = null
+    val logoUrl: String? = null,
+    val tipo: String = "DISCOTECA"
 )
 
 data class DiscoAuthResponse(

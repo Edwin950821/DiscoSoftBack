@@ -4,9 +4,6 @@ import jakarta.validation.constraints.Email
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Pattern
 
-/**
- * DTO para login con código 2FA
- */
 data class LoginWith2FARequest(
     @field:NotBlank(message = "El email es requerido")
     @field:Email(message = "El email debe ser válido")

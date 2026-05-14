@@ -2,10 +2,6 @@ package com.kompralo.infrastructure.persistence.entity
 
 import java.time.LocalDateTime
 
-/**
- * DTO de persistencia (NO es @Entity para evitar conflicto con com.kompralo.model.TwoFactorAuth)
- * La entidad JPA principal es com.kompralo.model.TwoFactorAuth
- */
 data class TwoFactorAuthEntity(
     val id: Long? = null,
     val userId: Long,

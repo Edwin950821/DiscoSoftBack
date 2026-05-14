@@ -23,6 +23,7 @@ import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler
 @EnableMethodSecurity
 class SecurityConfig(
     private val jwtAuthFilter: JwtAuthenticationFilter,
+    private val superReadOnlyFilter: SuperReadOnlyFilter,
     private val userDetailsService: CustomUserDetailsService
 ) {
 
@@ -105,6 +106,7 @@ class SecurityConfig(
             }
             .authenticationProvider(authenticationProvider())
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter::class.java)
+            .addFilterAfter(superReadOnlyFilter, JwtAuthenticationFilter::class.java)
 
         return http.build()
     }

@@ -49,4 +49,3 @@ data class ChangePasswordRequest(
     val currentPassword: String? = null,
     val newPassword: String
 )
-

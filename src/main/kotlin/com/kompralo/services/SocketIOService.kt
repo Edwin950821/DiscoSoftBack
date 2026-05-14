@@ -48,6 +48,11 @@ class SocketIOService(
 
                 val email = jwtService.extractUsername(token)
                 val role = jwtService.extractRole(token)
+                if (email.isNullOrBlank() || role.isNullOrBlank()) {
+                    log.warn("Conexion Socket.IO rechazada: JWT sin email/role")
+                    client.disconnect()
+                    return@ConnectListener
+                }
                 client.set("email", email)
                 client.set("role", role)
 
@@ -64,7 +69,7 @@ class SocketIOService(
                     log.warn("Could not resolve negocioId for {}: {}", email, e.message)
                     null
                 }
-                client.set("negocioId", negocioId)
+                if (negocioId != null) client.set("negocioId", negocioId)
 
                 val meseroId = client.handshakeData.getSingleUrlParam("meseroId")
 
@@ -78,6 +83,10 @@ class SocketIOService(
                         client.joinRoom("disco_admin")
                         negocioId?.let { client.joinRoom("disco_admin_$it") }
                         log.info("Dueño conectado a disco_admin{}: {}", negocioId?.let { "_$it" } ?: "", email)
+                    }
+                    "SUPER" -> {
+                        client.joinRoom("disco_super")
+                        log.info("Super conectado a disco_super: {}", email)
                     }
                     "MESERO" -> {
                         meseroId?.let {
@@ -93,7 +102,7 @@ class SocketIOService(
 
                 log.debug("Socket.IO conectado: {} ({}) role={}", client.sessionId, email, role)
             } catch (e: Exception) {
-                log.warn("Conexion Socket.IO rechazada: {}", e.message)
+                log.warn("Conexion Socket.IO rechazada: [{}] {}", e.javaClass.simpleName, e.message)
                 client.disconnect()
             }
         })
@@ -174,6 +183,11 @@ class SocketIOService(
         }
     }
 
+    fun sendToSuper(event: String, data: Any) {
+        if (!enabled) return
+        socketIOServer.getRoomOperations("disco_super").sendEvent(event, data)
+    }
+
     fun sendToMesero(meseroId: String, event: String, data: Any, negocioId: String? = null) {
         if (!enabled) return
         if (negocioId != null) {
@@ -193,11 +207,25 @@ class SocketIOService(
     }
 
     private fun extractTokenFromHandshake(client: SocketIOClient): String? {
+        val authData = client.handshakeData.authToken
+        when (authData) {
+            is Map<*, *> -> {
+                val t = authData["token"] as? String
+                if (!t.isNullOrBlank()) return t
+            }
+            is String -> if (authData.isNotBlank()) return authData
+        }
+
+        val cookieHeader = client.handshakeData.httpHeaders.get("Cookie")
+        if (!cookieHeader.isNullOrBlank()) {
+            val match = Regex("authToken=([^;]+)").find(cookieHeader)
+            val cookieToken = match?.groupValues?.get(1)
+            if (!cookieToken.isNullOrBlank()) return cookieToken
+        }
+
         val queryToken = client.handshakeData.getSingleUrlParam("token")
         if (!queryToken.isNullOrBlank()) return queryToken
 
-        val cookieHeader = client.handshakeData.httpHeaders.get("Cookie") ?: return null
-        val match = Regex("authToken=([^;]+)").find(cookieHeader)
-        return match?.groupValues?.get(1)
+        return null
     }
 }

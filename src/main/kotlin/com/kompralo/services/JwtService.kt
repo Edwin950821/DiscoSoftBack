@@ -21,9 +21,10 @@ class JwtService {
         return Keys.hmacShaKeyFor(secret.toByteArray())
     }
 
-    fun generateToken(email: String, role: String? = null): String {
+    fun generateToken(email: String, role: String? = null, rememberMe: Boolean = false): String {
         val now = Date()
-        val expiryDate = Date(now.time + expiration)
+        val effectiveExpiration = if (rememberMe) 30L * 24 * 60 * 60 * 1000 else expiration
+        val expiryDate = Date(now.time + effectiveExpiration)
 
         val builder = Jwts.builder()
             .subject(email)

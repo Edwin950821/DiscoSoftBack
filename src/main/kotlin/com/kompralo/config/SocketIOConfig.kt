@@ -34,7 +34,7 @@ class SocketIOConfig(
             hostname = host
             port = this@SocketIOConfig.port
 
-            origin = allowedOrigins.split(",").joinToString(",") { it.trim() }
+            origin = "*"
 
             isAllowCustomRequests = true
             upgradeTimeout = 10000

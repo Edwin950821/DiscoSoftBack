@@ -6,7 +6,6 @@ import com.kompralo.model.ShippingType
 import java.math.BigDecimal
 import java.time.LocalDateTime
 
-
 data class StoreProfileResponse(
     val businessName: String,
     val businessType: String?,
@@ -43,7 +42,6 @@ data class UpdateGeneralSettingsRequest(
     val currency: String? = null,
     val maintenanceMode: Boolean? = null
 )
-
 
 data class PaymentMethodConfigResponse(
     val method: String,
@@ -147,7 +145,6 @@ data class UpdateNotificationPreferencesRequest(
     val pushNotifications: Boolean? = null
 )
 
-
 data class AppearanceSettingsResponse(
     val primaryColor: String,
     val bannerUrl: String?,
@@ -163,7 +160,6 @@ data class UpdateAppearanceSettingsRequest(
     val instagramUrl: String? = null,
     val twitterUrl: String? = null
 )
-
 
 data class StorePolicyResponse(
     val id: Long,

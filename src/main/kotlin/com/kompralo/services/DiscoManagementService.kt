@@ -26,9 +26,11 @@ class DiscoManagementService(
     private val promocionRepo: DiscoPromocionRepository,
     private val pedidoRepo: DiscoPedidoRepository,
     private val cuentaRepo: DiscoCuentaMesaRepository,
+    private val negocioRepo: com.kompralo.repository.NegocioRepository,
     private val userRepository: UserRepository,
     private val passwordEncoder: PasswordEncoder,
-    private val tenantContext: TenantContext
+    private val tenantContext: TenantContext,
+    private val socketIO: SocketIOService
 ) {
 
     private val tenantId: String get() = tenantContext.getNegocioId().toString()
@@ -36,19 +38,39 @@ class DiscoManagementService(
     @PersistenceContext
     private lateinit var entityManager: EntityManager
 
-    /**
-     * Valida que el recurso pertenezca al negocio del tenant actual.
-     * Lanza IllegalArgumentException si el recurso es de otro negocio.
-     * Esto previene que un admin de un negocio modifique/borre recursos de otro
-     * incluso si conoce su UUID (defensa en profundidad).
-     *
-     * Si `tenantId` se pasa explícito, se usa ese; sino se resuelve del contexto
-     * (usar el explícito cuando se valida en bucle para evitar N consultas a DB).
-     */
     private fun ensureMismoTenant(recursoNegocioId: UUID?, recursoTipo: String, tenantId: UUID? = null) {
         val tid = tenantId ?: tenantContext.getNegocioId()
         if (recursoNegocioId != tid) {
             throw IllegalArgumentException("$recursoTipo no pertenece al negocio actual")
+        }
+    }
+
+    private fun notifySuper(modulo: String, accion: String, recursoId: String?, descripcion: String?) {
+        val negocioId = try { tenantContext.getNegocioId() } catch (_: Exception) { return }
+        val negocio = try { negocioRepo.findById(negocioId).orElse(null) } catch (_: Exception) { null }
+
+        val payload = mapOf(
+            "id" to UUID.randomUUID().toString(),
+            "negocioId" to negocioId.toString(),
+            "negocioNombre" to (negocio?.nombre ?: "Desconocido"),
+            "negocioColor" to (negocio?.colorPrimario ?: "#888"),
+            "modulo" to modulo,
+            "accion" to accion,
+            "recursoId" to recursoId,
+            "descripcion" to descripcion,
+            "timestamp" to java.time.Instant.now().toString()
+        )
+
+        val enviar = { runCatching { socketIO.sendToSuper("super_actualizacion", payload) } }
+
+        if (org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive()) {
+            org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                object : org.springframework.transaction.support.TransactionSynchronization {
+                    override fun afterCommit() { enviar() }
+                }
+            )
+        } else {
+            enviar()
         }
     }
 
@@ -80,7 +102,9 @@ class DiscoManagementService(
             precio = req.precio ?: producto.precio,
             activo = req.activo ?: producto.activo
         )
-        return productoRepo.save(updated).toResponse()
+        val saved = productoRepo.save(updated).toResponse()
+        notifySuper("PRODUCTO", "UPDATE", id.toString(), "Producto \"${saved.nombre}\" actualizado")
+        return saved
     }
 
     @Transactional
@@ -144,6 +168,9 @@ class DiscoManagementService(
         req.avatar?.let { mesero.avatar = it }
         req.activo?.let { mesero.activo = it }
         val saved = meseroRepo.save(mesero)
+        if (!saved.nombre.equals("barra", ignoreCase = true)) {
+            notifySuper("MESERO", "UPDATE", id.toString(), "Mesero \"${saved.nombre}\" actualizado")
+        }
         return DiscoMeseroResponse(saved.id!!, saved.nombre, saved.color, saved.avatar, saved.activo, saved.username)
     }
 
@@ -251,43 +278,48 @@ class DiscoManagementService(
             jornada.meseros.add(meseroJornada)
         }
 
-        return jornadaRepo.save(jornada).toResponse()
+        val saved = jornadaRepo.save(jornada).toResponse()
+        notifySuper("LIQUIDACION", "CREATE", saved.id.toString(),
+            "Liquidacion ${req.sesion} (${req.fecha}) registrada")
+        return saved
     }
 
     @Transactional
     fun updateJornada(id: UUID, req: DiscoJornadaRequest): DiscoJornadaResponse {
-        val jornada = jornadaRepo.findById(id)
-            .orElseThrow { IllegalArgumentException("Jornada no encontrada con id: $id") }
-        ensureMismoTenant(jornada.negocioId, "Jornada")
+        val existing = jornadaRepo.findById(id)
+            .orElseThrow { RuntimeException("Jornada no encontrada con id: $id") }
+        ensureMismoTenant(existing.negocioId, "Jornada")
 
         val totalVendido = req.meseros.sumOf { it.totalMesero }
         val cortesias = req.meseros.sumOf { it.cortesias }
         val gastos = req.meseros.sumOf { it.gastos }
+
         val pagosEfectivo = req.meseros.sumOf { it.pagos["Efectivo"] ?: 0 }
         val pagosQR = req.meseros.sumOf { it.pagos["QR"] ?: 0 }
         val pagosNequi = req.meseros.sumOf { it.pagos["Nequi"] ?: 0 }
         val pagosDatafono = req.meseros.sumOf { it.pagos["Datafono"] ?: 0 }
         val pagosVales = req.meseros.sumOf { it.pagos["Vales"] ?: 0 }
+
         val totalRecibido = pagosEfectivo + pagosQR + pagosNequi + pagosDatafono + pagosVales
         val esperado = totalVendido - cortesias - gastos
         val saldo = totalRecibido - esperado
 
-        jornada.sesion = req.sesion
-        jornada.fecha = req.fecha
-        jornada.totalVendido = totalVendido
-        jornada.totalRecibido = totalRecibido
-        jornada.saldo = saldo
-        jornada.cortesias = cortesias
-        jornada.gastos = gastos
-        jornada.pagosEfectivo = pagosEfectivo
-        jornada.pagosQR = pagosQR
-        jornada.pagosNequi = pagosNequi
-        jornada.pagosDatafono = pagosDatafono
-        jornada.pagosVales = pagosVales
+        existing.meseros.clear()
+        jornadaRepo.flush()
 
-        jornada.meseros.clear()
-        jornadaRepo.saveAndFlush(jornada)
-        val negocioId = tenantContext.getNegocioId()
+        existing.sesion = req.sesion
+        existing.fecha = req.fecha
+        existing.totalVendido = totalVendido
+        existing.totalRecibido = totalRecibido
+        existing.saldo = saldo
+        existing.cortesias = cortesias
+        existing.gastos = gastos
+        existing.pagosEfectivo = pagosEfectivo
+        existing.pagosQR = pagosQR
+        existing.pagosNequi = pagosNequi
+        existing.pagosDatafono = pagosDatafono
+        existing.pagosVales = pagosVales
+
         req.meseros.forEach { mReq ->
             val meseroJornada = DiscoMeseroJornada(
                 meseroId = mReq.meseroId,
@@ -307,21 +339,28 @@ class DiscoManagementService(
                 cortesiasDetalle = if (mReq.cortesiasDetalle.isNotEmpty()) objectMapper.writeValueAsString(mReq.cortesiasDetalle) else null,
                 gastosDetalle = if (mReq.gastosDetalle.isNotEmpty()) objectMapper.writeValueAsString(mReq.gastosDetalle) else null,
                 lineasDetalle = if (mReq.lineas.isNotEmpty()) objectMapper.writeValueAsString(mReq.lineas) else null,
-                negocioId = negocioId
+                negocioId = existing.negocioId
             )
-            meseroJornada.jornada = jornada
-            jornada.meseros.add(meseroJornada)
+            meseroJornada.jornada = existing
+            existing.meseros.add(meseroJornada)
         }
 
-        return jornadaRepo.save(jornada).toResponse()
+        val saved = jornadaRepo.save(existing).toResponse()
+        notifySuper("LIQUIDACION", "UPDATE", saved.id.toString(),
+            "Liquidacion ${req.sesion} (${req.fecha}) actualizada")
+        return saved
     }
 
     @Transactional
     fun deleteJornada(id: UUID) {
         val jornada = jornadaRepo.findById(id)
-            .orElseThrow { IllegalArgumentException("Jornada no encontrada con id: $id") }
+            .orElseThrow { RuntimeException("Jornada no encontrada con id: $id") }
         ensureMismoTenant(jornada.negocioId, "Jornada")
+        val sesion = jornada.sesion
+        val fecha = jornada.fecha
         jornadaRepo.delete(jornada)
+        notifySuper("LIQUIDACION", "DELETE", id.toString(),
+            "Liquidacion $sesion ($fecha) eliminada")
     }
 
     fun getAllInventarios(): List<DiscoInventarioResponse> {
@@ -354,21 +393,24 @@ class DiscoManagementService(
             inventario.lineas.add(linea)
         }
 
-        return inventarioRepo.save(inventario).toResponse()
+        val saved = inventarioRepo.save(inventario).toResponse()
+        notifySuper("INVENTARIO", "CREATE", saved.id.toString(),
+            "Inventario del ${req.fecha} registrado")
+        return saved
     }
 
     @Transactional
     fun updateInventario(id: UUID, req: DiscoInventarioRequest): DiscoInventarioResponse {
-        val inventario = inventarioRepo.findById(id)
-            .orElseThrow { IllegalArgumentException("Inventario no encontrado con id: $id") }
-        ensureMismoTenant(inventario.negocioId, "Inventario")
+        val existing = inventarioRepo.findById(id)
+            .orElseThrow { RuntimeException("Inventario no encontrado con id: $id") }
+        ensureMismoTenant(existing.negocioId, "Inventario")
 
-        inventario.fecha = req.fecha
-        inventario.totalGeneral = req.totalGeneral
-        inventario.lineas.clear()
-        inventarioRepo.saveAndFlush(inventario)
+        existing.lineas.clear()
+        inventarioRepo.flush()
 
-        val negocioId = tenantContext.getNegocioId()
+        existing.fecha = req.fecha
+        existing.totalGeneral = req.totalGeneral
+
         req.lineas.forEach { lReq ->
             val linea = DiscoLineaInventario(
                 productoId = lReq.productoId,
@@ -379,20 +421,27 @@ class DiscoManagementService(
                 invFisico = lReq.invFisico,
                 saldo = lReq.saldo,
                 total = lReq.total,
-                negocioId = negocioId
+                negocioId = existing.negocioId
             )
-            linea.inventario = inventario
-            inventario.lineas.add(linea)
+            linea.inventario = existing
+            existing.lineas.add(linea)
         }
-        return inventarioRepo.save(inventario).toResponse()
+
+        val saved = inventarioRepo.save(existing).toResponse()
+        notifySuper("INVENTARIO", "UPDATE", saved.id.toString(),
+            "Inventario del ${req.fecha} actualizado")
+        return saved
     }
 
     @Transactional
     fun deleteInventario(id: UUID) {
         val inventario = inventarioRepo.findById(id)
-            .orElseThrow { IllegalArgumentException("Inventario no encontrado con id: $id") }
+            .orElseThrow { RuntimeException("Inventario no encontrado con id: $id") }
         ensureMismoTenant(inventario.negocioId, "Inventario")
+        val fecha = inventario.fecha
         inventarioRepo.delete(inventario)
+        notifySuper("INVENTARIO", "DELETE", id.toString(),
+            "Inventario del $fecha eliminado")
     }
 
     fun getAllMesas(): List<DiscoMesaResponse> {
@@ -623,7 +672,9 @@ class DiscoManagementService(
             regaloCantidad = req.regaloCantidad ?: promo.regaloCantidad,
             activa = req.activa ?: promo.activa
         )
-        return promocionRepo.save(updated).toResponse()
+        val saved = promocionRepo.save(updated).toResponse()
+        notifySuper("PROMOCION", "UPDATE", id.toString(), "Promocion \"${saved.nombre}\" actualizada")
+        return saved
     }
 
     @Transactional

@@ -95,8 +95,8 @@ class DiscoAuthController(
                 throw IllegalArgumentException("No tienes acceso a Monastery Club")
             }
 
-            val accessToken = jwtService.generateToken(user.email, user.role.name)
-            val refreshToken = jwtService.generateToken(user.email, "refresh")
+            val accessToken = jwtService.generateToken(user.email, user.role.name, request.rememberMe)
+            val refreshToken = jwtService.generateToken(user.email, "refresh", request.rememberMe)
             val secure = isSecureRequest(servletRequest)
             servletResponse.addCookie(createAuthCookie(accessToken, secure))
 
@@ -115,7 +115,8 @@ class DiscoAuthController(
                         nombre = neg.nombre,
                         slug = neg.slug,
                         colorPrimario = neg.colorPrimario,
-                        logoUrl = neg.logoUrl
+                        logoUrl = neg.logoUrl,
+                        tipo = neg.tipo.name
                     )
                 }
                 negocioId = null

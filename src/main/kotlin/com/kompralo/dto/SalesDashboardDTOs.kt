@@ -2,18 +2,12 @@ package com.kompralo.dto
 
 import java.math.BigDecimal
 
-/**
- * DTO para métricas de ventas en un período
- */
 data class SalesPeriodMetrics(
     val count: Long,
     val total: BigDecimal,
     val percentageChange: BigDecimal? = null
 )
 
-/**
- * DTO para conteo de órdenes por estado
- */
 data class OrderStatusCount(
     val pending: Long,
     val processing: Long,
@@ -21,9 +15,6 @@ data class OrderStatusCount(
     val delivered: Long
 )
 
-/**
- * DTO de respuesta para dashboard de ventas del vendedor
- */
 data class SalesDashboardResponse(
 
     val today: SalesPeriodMetrics,

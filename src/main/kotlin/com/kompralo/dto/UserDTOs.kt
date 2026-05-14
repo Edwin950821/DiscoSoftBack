@@ -7,9 +7,6 @@ import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
 import java.time.LocalDateTime
 
-/**
- * DTO para respuesta de usuario (sin password)
- */
 data class UserDTO(
     val id: Long,
     val email: String,
@@ -34,9 +31,6 @@ data class UserDTO(
     }
 }
 
-/**
- * DTO para crear un nuevo usuario
- */
 data class CreateUserRequest(
     @field:NotBlank(message = "El nombre es requerido")
     @field:Size(min = 2, max = 100, message = "El nombre debe tener entre 2 y 100 caracteres")
@@ -58,9 +52,6 @@ data class CreateUserRequest(
     val username: String? = null
 )
 
-/**
- * DTO para actualizar un usuario existente
- */
 data class UpdateUserRequest(
     @field:Size(min = 2, max = 100, message = "El nombre debe tener entre 2 y 100 caracteres")
     val name: String? = null,
@@ -76,9 +67,6 @@ data class UpdateUserRequest(
     val isActive: Boolean? = null
 )
 
-/**
- * DTO para respuesta paginada
- */
 data class PagedResponse<T>(
     val content: List<T>,
     val page: Int,
