@@ -193,6 +193,20 @@ class DiscoManagementController(
         }
     }
 
+    @PutMapping("/inventarios/{id}")
+    fun updateInventario(@PathVariable id: UUID, @RequestBody req: DiscoInventarioRequest): ResponseEntity<*> {
+        return try {
+            val inventario = discoManagementService.updateInventario(id, req)
+            ResponseEntity.ok(inventario)
+        } catch (e: IllegalArgumentException) {
+            ResponseEntity.badRequest().body(mapOf("message" to (e.message ?: "Datos inválidos")))
+        } catch (e: Exception) {
+            log.error("Error al actualizar inventario $id: ${e.message}", e)
+            ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(mapOf("message" to "Error al actualizar inventario"))
+        }
+    }
+
     @DeleteMapping("/inventarios/{id}")
     fun deleteInventario(@PathVariable id: UUID): ResponseEntity<Void> {
         return try {

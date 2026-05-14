@@ -358,9 +358,39 @@ class DiscoManagementService(
     }
 
     @Transactional
+    fun updateInventario(id: UUID, req: DiscoInventarioRequest): DiscoInventarioResponse {
+        val inventario = inventarioRepo.findById(id)
+            .orElseThrow { IllegalArgumentException("Inventario no encontrado con id: $id") }
+        ensureMismoTenant(inventario.negocioId, "Inventario")
+
+        inventario.fecha = req.fecha
+        inventario.totalGeneral = req.totalGeneral
+        inventario.lineas.clear()
+        inventarioRepo.saveAndFlush(inventario)
+
+        val negocioId = tenantContext.getNegocioId()
+        req.lineas.forEach { lReq ->
+            val linea = DiscoLineaInventario(
+                productoId = lReq.productoId,
+                nombre = lReq.nombre,
+                valorUnitario = lReq.valorUnitario,
+                invInicial = lReq.invInicial,
+                entradas = lReq.entradas,
+                invFisico = lReq.invFisico,
+                saldo = lReq.saldo,
+                total = lReq.total,
+                negocioId = negocioId
+            )
+            linea.inventario = inventario
+            inventario.lineas.add(linea)
+        }
+        return inventarioRepo.save(inventario).toResponse()
+    }
+
+    @Transactional
     fun deleteInventario(id: UUID) {
         val inventario = inventarioRepo.findById(id)
-            .orElseThrow { RuntimeException("Inventario no encontrado con id: $id") }
+            .orElseThrow { IllegalArgumentException("Inventario no encontrado con id: $id") }
         ensureMismoTenant(inventario.negocioId, "Inventario")
         inventarioRepo.delete(inventario)
     }

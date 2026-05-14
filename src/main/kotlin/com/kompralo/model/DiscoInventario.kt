@@ -13,7 +13,7 @@ data class DiscoInventario(
     val id: UUID? = null,
 
     @Column(nullable = false)
-    val fecha: String,
+    var fecha: String,
 
     @Column(name = "total_general", nullable = false)
     var totalGeneral: Int = 0,
